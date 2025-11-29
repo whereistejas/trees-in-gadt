@@ -1,0 +1,29 @@
+# Ordered set implementations
+
+| Tree      | Balance Method         | Lookup     | Insert/Delete | Use Case                   |
+| --------- | ---------------------- | ---------- | ------------- | -------------------------- |
+| BST       | None                   | O(n) worst | O(n) worst    | Simple cases               |
+| Red-Black | Recoloring + rotations | O(log n)   | O(log n)      | General purpose (std libs) |
+| AVL       | Rotations              | O(log n)   | O(log n)      | Read-heavy workloads       |
+| B-Tree    | Node splitting/merging | O(log n)   | O(log n)      | Databases, filesystems     |
+| 2-3 Tree  | Node splitting/merging | O(log n)   | O(log n)      | Teaching, functional langs |
+
+# Ordered Sets
+
+| Language | Library/Module       | Collection Types                     | Tree Implementation | Notes                                                               |
+| -------- | -------------------- | ------------------------------------ | ------------------- | ------------------------------------------------------------------- |
+| Rust     | `std::collections`   | `BTreeMap`, `BTreeSet`               | B-tree              | Variable node size (6-11 elements), optimized for cache efficiency  |
+| C++      | `std`                | `map`, `set`, `multimap`, `multiset` | Red-black tree      | Self-balancing BST                                                  |
+| Java     | `java.util`          | `TreeMap`, `TreeSet`                 | Red-black tree      | Self-balancing BST                                                  |
+| Kotlin   | `kotlin.collections` | N/A                                  | None                | No tree-based ordered map in stdlib, delegates to Java's `TreeMap`  |
+| Python   | `collections`        | N/A                                  | None                | No tree-based ordered map in stdlib                                 |
+| Go       | `container`          | N/A                                  | None                | No ordered map in stdlib                                            |
+| Dart     | `dart:collection`    | `SplayTreeMap`, `SplayTreeSet`       | Splay tree          | Self-adjusting BST with amortized logarithmic operations            |
+| Swift    | Foundation           | N/A                                  | None                | No persistent ordered collections in stdlib                         |
+| OCaml    | `Stdlib`             | `Map`, `Set`                         | AVL tree            | Strict height balancing for better worst-case lookups               |
+| OCaml    | `Base` (Jane Street) | `Map`, `Set`                         | AVL tree            | Different API, same underlying structure                            |
+| Haskell  | `Data`               | `Map`, `Set`                         | Size-balanced tree  | Weight-balanced BST variant                                         |
+| Agda     | `stdlib`             | N/A                                  | None                | AVL trees available in `Data.Tree.AVL` module but not for maps/sets |
+| Idris    | `base`/`contrib`     | N/A                                  | None                | No standard tree-based ordered collections                          |
+
+# GADTs

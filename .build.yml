@@ -1,0 +1,25 @@
+image: alpine/edge
+packages:
+  - opam
+  - build-base
+  - linux-headers
+  - git
+secrets:
+  - e4e950a7-2510-480d-8672-0766bf860ed0
+sources:
+  - https://git.sr.ht/~whereistejas/gadt
+tasks:
+  - install-ocaml: |
+      opam init --bare --disable-sandboxing --auto-setup -y
+      opam switch create 5.4.0 -y
+      eval $(opam env)
+      opam install dune ocamlformat.0.28.1 -y
+  - build: |
+      cd ~/gadt
+      eval $(opam env)
+      opam install . --deps-only --with-test -y
+      dune build --ignore-lock-dir @fmt @all || exit 1
+  - test: |
+      cd ~/gadt
+      eval $(opam env)
+      dune runtest

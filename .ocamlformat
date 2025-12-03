@@ -3,3 +3,4 @@ profile=default
 type-decl=sparse
 break-separators=after
 break-infix=fit-or-vertical
+indicate-multiline-delimiters=closing-on-separate-line

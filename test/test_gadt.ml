@@ -136,8 +136,8 @@ let%expect_test "remove node with only left child with Predecessor shift" =
   Stdio.print_string (BST.pp_tree Int.to_string node);
   [%expect {| 1 |}]
 
-let%expect_test
-    "remove node with only right child with Predecessor and Successor shifts" =
+let%expect_test "remove node with only right child - both shifts should succeed"
+    =
   let node = BST.Node { elt = 3; left = Empty; right = Leaf 5 } in
   Stdio.print_string (BST.pp_tree Int.to_string node);
   [%expect {|
@@ -145,12 +145,36 @@ let%expect_test
     ┌─┴─┐
     .   5
     |}];
-  let _node, removed = BST.remove ~shift:BST.Pred 3 ~cmp node in
-  [%test_eq: int option] removed None;
-  let node, removed = BST.remove ~shift:BST.Succ 3 ~cmp node in
+  (* Pred should fall back to right child since left is Empty *)
+  let node_pred, removed = BST.remove ~shift:BST.Pred 3 ~cmp node in
   [%test_eq: int option] removed (Some 3);
-  Stdio.print_string (BST.pp_tree Int.to_string node);
+  Stdio.print_string (BST.pp_tree Int.to_string node_pred);
+  [%expect {| 5 |}];
+  (* Succ works directly on the right child *)
+  let node_succ, removed = BST.remove ~shift:BST.Succ 3 ~cmp node in
+  [%test_eq: int option] removed (Some 3);
+  Stdio.print_string (BST.pp_tree Int.to_string node_succ);
   [%expect {| 5 |}]
+
+let%expect_test "remove node with only left child - both shifts should succeed"
+    =
+  let node = BST.Node { elt = 3; left = Leaf 1; right = Empty } in
+  Stdio.print_string (BST.pp_tree Int.to_string node);
+  [%expect {|
+      3
+    ┌─┴─┐
+    1   .
+    |}];
+  (* Succ should fall back to left child since right is Empty *)
+  let node_succ, removed = BST.remove ~shift:BST.Succ 3 ~cmp node in
+  [%test_eq: int option] removed (Some 3);
+  Stdio.print_string (BST.pp_tree Int.to_string node_succ);
+  [%expect {| 1 |}];
+  (* Pred works directly on the left child *)
+  let node_pred, removed = BST.remove ~shift:BST.Pred 3 ~cmp node in
+  [%test_eq: int option] removed (Some 3);
+  Stdio.print_string (BST.pp_tree Int.to_string node_pred);
+  [%expect {| 1 |}]
 
 let%expect_test "remove node where left child is Empty" =
   let left = BST.Node { elt = 1; left = Empty; right = Leaf 2 } in

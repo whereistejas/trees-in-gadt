@@ -16,17 +16,32 @@ module BST = struct
         < [elt] < all values in [right]
       + {b No duplicates}: Each value appears at most once
       + {b Leaf normalization}: [Node { elt; left = Empty; right = Empty }] is
-        invalid; use [Leaf elt] instead
+        invalid; use [Leaf elt] instead. Enforced by [make_node].
       + {b Sorted traversal}: In-order traversal yields sorted list
+      + {b Minimum is leftmost}: The minimum value has no left child. Exploited
+        by [pop_min] for O(h) extraction.
+      + {b Maximum is rightmost}: The maximum value has no right child.
+        Exploited by [pop_max] for O(h) extraction.
 
       {2 Operations}
-      - [insert]: Adds value, no-op if present. O(h).
-      - [remove]: Removes value. Uses in-order successor. O(h).
-      - [member]: Checks existence. O(h).
+      All operations take a [~cmp] comparator function.
+      {ul
+       {- [insert]: Adds value, no-op if present. O(h). }
+       {- [remove]: Removes value and returns [(new_tree, removed_value)]. O(h).
+          Uses [~shift] to choose replacement strategy:
+          - [Succ]: Replace with in-order successor (min of right subtree)
+          - [Pred]: Replace with in-order predecessor (max of left subtree)
+       }
+       {- [member]: Checks existence. O(h). }
+       {- [pop_min]: Extracts minimum value and returns modified tree. O(h). }
+       {- [pop_max]: Extracts maximum value and returns modified tree. O(h). }
+       {- [make_node]: Smart constructor that enforces leaf normalization. }
+       {- [pp_tree]: Pretty-prints the tree structure. }
+      }
 
       {2 Limitations}
-      - Not self-balancing: O(n) worst case
-      - Uses polymorphic comparison ([Base.Poly]) *)
+      - Not self-balancing: O(n) worst case for degenerate trees
+      - Requires explicit comparator ([~cmp]) for all search operations *)
   type 'a node =
     | Empty
     | Leaf of 'a
@@ -139,7 +154,7 @@ module BST = struct
   let rec member item ~cmp node : bool =
     match node with
     | Empty -> false
-    | Leaf lf -> lf = item
+    | Leaf lf -> cmp item lf = Ordering.Equal
     | Node { elt; left; right } -> (
         match cmp item elt with
         | Ordering.Less -> member item ~cmp left
@@ -193,18 +208,29 @@ module BST = struct
     | Node { elt; left; right } as node -> (
         match cmp item elt with
         | Ordering.Equal -> (
-            match shift with
-            | Succ -> (
+            (* Check subtree availability first, then apply shift preference *)
+            match (left, right) with
+            | Empty, Empty ->
+                (* Invariant: shouldn't happen (would be Leaf), but handle
+                   safely *)
+                (Empty, Some elt)
+            | Empty, right ->
+                (* Only right subtree exists - use successor *)
                 let right, min = pop_min right in
-                match min with
-                | Some new_elt -> (make_node new_elt left right, Some elt)
-                | None -> (node, None)
-              )
-            | Pred -> (
+                (make_node (Option.value_exn min) Empty right, Some elt)
+            | left, Empty ->
+                (* Only left subtree exists - use predecessor *)
                 let left, max = pop_max left in
-                match max with
-                | Some new_elt -> (make_node new_elt left right, Some elt)
-                | None -> (node, None)
+                (make_node (Option.value_exn max) left Empty, Some elt)
+            | left, right -> (
+                (* Both subtrees exist - use shift preference *)
+                match shift with
+                | Succ ->
+                    let right, min = pop_min right in
+                    (make_node (Option.value_exn min) left right, Some elt)
+                | Pred ->
+                    let left, max = pop_max left in
+                    (make_node (Option.value_exn max) left right, Some elt)
               )
           )
         | Ordering.Less -> (

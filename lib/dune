@@ -1,4 +1,4 @@
 (library
  (name gadt)
  (public_name gadt)
- (libraries base stdio))
+ (libraries base))

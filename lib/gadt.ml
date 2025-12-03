@@ -1,6 +1,13 @@
 open Base
 
-module BST = struct
+module type For_testing = sig
+  type 'a node
+
+  val to_list : 'a node -> 'a list
+  val check_invariants : compare:('a -> 'a -> int) -> 'a node -> bool
+end
+
+module BST : For_testing = struct
   open Base.Poly
 
   (** Binary Search Tree (unbalanced)
@@ -221,4 +228,36 @@ module BST = struct
         | Ordering.Greater -> member item right
         | Ordering.Equal -> true
       )
+
+  let to_list (_node : 'a node) : 'a list = []
+  let check_invariants ~compare:_ (_node : 'a node) : bool = false
 end
+
+(*
+ * let invariants =
+ *   let in_range lower upper compare_elt v =
+ *     (match lower with
+ *      | None -> true
+ *      | Some lower -> compare_elt lower v < 0)
+ *     &&
+ *     match upper with
+ *     | None -> true
+ *     | Some upper -> compare_elt v upper < 0
+ *   in
+ *   let rec loop lower upper compare_elt t =
+ *     match t with
+ *     | Empty -> true
+ *     | Leaf { elt = v } -> in_range lower upper compare_elt v
+ *     | Node { left = l; elt = v; right = r; height = h; size = n } ->
+ *       let hl = height l
+ *       and hr = height r in
+ *       abs (hl - hr) <= 2
+ *       && h = max hl hr + 1
+ *       && n = length l + length r + 1
+ *       && in_range lower upper compare_elt v
+ *       && loop lower (Some v) compare_elt l
+ *       && loop (Some v) upper compare_elt r
+ *   in
+ *   fun t ~compare_elt -> loop None None compare_elt t
+ * ;;
+ *)

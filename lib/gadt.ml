@@ -1,13 +1,6 @@
 open Base
 
-module type For_testing = sig
-  type 'a node
-
-  val to_list : 'a node -> 'a list
-  val check_invariants : compare:('a -> 'a -> int) -> 'a node -> bool
-end
-
-module BST : For_testing = struct
+module BST = struct
   open Base.Poly
 
   (** Binary Search Tree (unbalanced)
@@ -44,7 +37,7 @@ module BST : For_testing = struct
       }
 
   (* Thank you Claude for this method. *)
-  let pp_tree (show : 'a -> string) (node : 'a node) : string =
+  let pp_tree (show : 'a -> string) node : string =
     let module Layout = struct
       type t = {
         lines : string list;
@@ -78,7 +71,7 @@ module BST : For_testing = struct
       else padded
     in
     let gap = 3 in
-    let rec build (node : 'a node) : Layout.t =
+    let rec build node : Layout.t =
       match node with
       | Empty -> { lines = [ "." ]; width = 1; root_pos = 0 }
       | Leaf v ->
@@ -126,22 +119,32 @@ module BST : For_testing = struct
     in
     build node |> fun { lines; _ } -> String.concat_lines lines
 
-  let compare a b : Ordering.t = Ordering.of_int (compare a b)
-
   (* TODO: Implement balancing. *)
-  let rec insert item = function
+  let rec insert item ~cmp node =
+    match node with
     | Empty -> Leaf item
-    | Leaf elt as lf -> (
-        match compare item elt with
-        | Ordering.Equal -> lf
+    | Leaf elt -> (
+        match cmp item elt with
         | Ordering.Less -> Node { elt; left = Leaf item; right = Empty }
         | Ordering.Greater -> Node { elt; left = Empty; right = Leaf item }
-      )
-    | Node { elt; left; right } as node -> (
-        match compare item elt with
         | Ordering.Equal -> node
-        | Ordering.Less -> Node { elt; left = insert item left; right }
-        | Ordering.Greater -> Node { elt; left; right = insert item right }
+      )
+    | Node { elt; left; right } -> (
+        match cmp item elt with
+        | Ordering.Less -> Node { elt; left = insert item ~cmp left; right }
+        | Ordering.Greater -> Node { elt; left; right = insert item ~cmp right }
+        | Ordering.Equal -> node
+      )
+
+  let rec member item ~cmp node : bool =
+    match node with
+    | Empty -> false
+    | Leaf lf -> lf = item
+    | Node { elt; left; right } -> (
+        match cmp item elt with
+        | Ordering.Less -> member item ~cmp left
+        | Ordering.Greater -> member item ~cmp right
+        | Ordering.Equal -> true
       )
 
   let make_node elt left right =
@@ -179,17 +182,16 @@ module BST : For_testing = struct
     | Succ
     | Pred
 
-  let rec remove ?(shift = Pred) (item : 'a) (node : 'a node) :
-      'a node * 'a option =
+  let rec remove ?(shift = Pred) item ~cmp node : 'a node * 'a option =
     match node with
     | Empty -> (Empty, None)
     | Leaf lf as leaf -> (
-        match compare item lf with
+        match cmp item lf with
         | Ordering.Equal -> (Empty, Some lf)
         | Ordering.Less | Ordering.Greater -> (leaf, None)
       )
     | Node { elt; left; right } as node -> (
-        match compare item elt with
+        match cmp item elt with
         | Ordering.Equal -> (
             match shift with
             | Succ -> (
@@ -206,31 +208,31 @@ module BST : For_testing = struct
               )
           )
         | Ordering.Less -> (
-            let left, removed = remove ~shift item left in
+            let left, removed = remove ~shift item ~cmp left in
             match removed with
             | Some _ -> (make_node elt left right, removed)
             | None -> (node, None)
           )
         | Ordering.Greater -> (
-            let right, removed = remove ~shift item right in
+            let right, removed = remove ~shift item ~cmp right in
             match removed with
             | Some _ -> (make_node elt left right, removed)
             | None -> (node, None)
           )
       )
+end
 
-  let rec member item = function
-    | Empty -> false
-    | Leaf lf -> lf = item
-    | Node { elt; left; right } -> (
-        match compare item elt with
-        | Ordering.Less -> member item left
-        | Ordering.Greater -> member item right
-        | Ordering.Equal -> true
-      )
+module BST_for_testing = struct
+  include BST
 
-  let to_list (_node : 'a node) : 'a list = []
-  let check_invariants ~compare:_ (_node : 'a node) : bool = false
+  let rec to_list_aux acc = function
+    | Empty -> acc
+    | Leaf elt -> elt :: acc
+    | Node { elt; left; right } ->
+        to_list_aux (elt :: to_list_aux acc right) left
+
+  let to_list node : 'a list = to_list_aux [] node
+  let check_invariants _node ~cmp:_ : bool = true
 end
 
 (*

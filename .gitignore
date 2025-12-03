@@ -18,6 +18,9 @@
 # ocamlbuild and Dune default working directory
 _build/
 
+# Fuzzing files
+_fuzz/
+
 # ocamlbuild targets
 *.byte
 *.native

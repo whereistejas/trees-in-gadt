@@ -1,6 +1,17 @@
 (library
  (name test_gadt)
+ (modules test_gadt)
  (libraries gadt base)
  (inline_tests)
  (preprocess
   (pps ppx_expect ppx_assert)))
+
+; AFL-native fuzz test (requires AFL-enabled OCaml switch)
+
+(executable
+ (name fuzz_afl)
+ (modules fuzz_afl)
+ (libraries gadt base afl-persistent)
+ (optional)
+ (ocamlopt_flags
+  (:standard -afl-instrument)))

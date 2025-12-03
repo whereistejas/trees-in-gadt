@@ -25,10 +25,17 @@
   (base
    (>= 0.17))
   (ppx_inline_test
-   (>= 0.16.1))
+   (and
+    :with-test
+    (>= 0.16.1)))
   (ppx_assert
-   (>= 0.16.0))
+   (and
+    :with-test
+    (>= 0.16.0)))
   (ppx_expect
-   (>= 0.16.0))))
+   (and
+    :with-test
+    (>= 0.16.0))))
+ (depopts afl-persistent))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html

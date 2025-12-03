@@ -249,6 +249,7 @@ module BST = struct
 end
 
 module BST_for_testing = struct
+  open Base.Poly
   include BST
 
   let rec to_list_aux acc = function
@@ -258,7 +259,37 @@ module BST_for_testing = struct
         to_list_aux (elt :: to_list_aux acc right) left
 
   let to_list node : 'a list = to_list_aux [] node
-  let check_invariants _node ~cmp:_ : bool = true
+
+  (** Check that all BST invariants hold:
+      - Ordering: left < elt < right
+      - No duplicates (implied by strict ordering)
+      - Leaf normalization: no Node with both children Empty *)
+  let check_invariants node ~cmp : bool =
+    (* Check if elt is within (lower, upper) bounds *)
+    let in_range ~lower ~upper elt =
+      let lower_ok =
+        match lower with None -> true | Some lo -> cmp lo elt = Ordering.Less
+      in
+      let upper_ok =
+        match upper with None -> true | Some hi -> cmp elt hi = Ordering.Less
+      in
+      lower_ok && upper_ok
+    in
+    let rec loop ~lower ~upper = function
+      | Empty -> true
+      | Leaf elt -> in_range ~lower ~upper elt
+      | Node { elt; left; right } ->
+          (* Leaf normalization: shouldn't have both children Empty *)
+          let normalized = not (left = Empty && right = Empty) in
+          (* Ordering: elt must be within bounds *)
+          let ordered = in_range ~lower ~upper elt in
+          (* Recurse: left gets upper bound, right gets lower bound *)
+          normalized
+          && ordered
+          && loop ~lower ~upper:(Some elt) left
+          && loop ~lower:(Some elt) ~upper right
+    in
+    loop ~lower:None ~upper:None node
 end
 
 (*

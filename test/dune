@@ -1,2 +1,6 @@
-(test
- (name test_gadt))
+(library
+ (name test_gadt)
+ (libraries gadt base)
+ (inline_tests)
+ (preprocess
+  (pps ppx_expect)))

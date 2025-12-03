@@ -20,6 +20,13 @@
  (depends
   (ocaml
    (>= 5.4.0))
-  base))
+  (dune
+   (>= 3.20.2))
+  (base
+   (>= 0.17))
+  (ppx_inline_test
+   (>= 0.16.1))
+  (ppx_expect
+   (>= 0.16.0))))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html

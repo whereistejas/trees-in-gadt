@@ -7,9 +7,11 @@ license: "MIT"
 homepage: "https://github.com/whereistejas/gadt"
 bug-reports: "https://github.com/whereistejas/gadt/issues"
 depends: [
-  "dune" {>= "3.20"}
   "ocaml" {>= "5.4.0"}
-  "base"
+  "dune" {>= "3.20" & >= "3.20.2"}
+  "base" {>= "0.17"}
+  "ppx_inline_test" {>= "0.16.1"}
+  "ppx_expect" {>= "0.16.0"}
   "odoc" {with-doc}
 ]
 build: [

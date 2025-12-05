@@ -6,14 +6,12 @@ module BST = struct
   (** Binary Search Tree (unbalanced)
 
       {2 Structure}
-
       Three node types:
       - [Empty]: represents absence of a subtree
       - [Leaf]: a value with no children
       - [Node]: a value with left and right subtrees
 
       {2 Invariants}
-
       + {b Ordering}: For any [Node { elt; left; right }], all values in [left]
         < [elt] < all values in [right]
       + {b No duplicates}: Each value appears at most once
@@ -22,13 +20,11 @@ module BST = struct
       + {b Sorted traversal}: In-order traversal yields sorted list
 
       {2 Operations}
-
       - [insert]: Adds value, no-op if present. O(h).
       - [remove]: Removes value. Uses in-order successor. O(h).
       - [member]: Checks existence. O(h).
 
       {2 Limitations}
-
       - Not self-balancing: O(n) worst case
       - Uses polymorphic comparison ([Base.Poly]) *)
   type 'a node =
@@ -39,68 +35,6 @@ module BST = struct
         left : 'a node;
         right : 'a node;
       }
-
-  let compare a b : Ordering.t = Ordering.of_int (compare a b)
-
-  (* TODO: Implement balancing. *)
-  let rec insert (node : 'a node) (item : 'a) : 'a node =
-    match node with
-    | Empty -> Leaf item
-    | Leaf elt -> (
-        match compare item elt with
-        | Ordering.Less -> Node { elt; left = Leaf item; right = Empty }
-        | Ordering.Greater -> Node { elt; left = Empty; right = Leaf item }
-        | Ordering.Equal -> node
-      )
-    | Node { elt; left; right } -> (
-        match compare item elt with
-        | Ordering.Less -> Node { elt; left = insert left item; right }
-        | Ordering.Greater -> Node { elt; left; right = insert right item }
-        | Ordering.Equal -> node
-      )
-
-  type reordering =
-    | Succ
-    | Pred
-
-  (* TODO: Implement balancing. *)
-  let rec remove node item : 'a node * 'a option =
-    match node with
-    | Empty -> (node, None)
-    | Leaf elt -> (
-        match compare item elt with
-        | Ordering.Less | Ordering.Greater -> (node, None)
-        | Ordering.Equal -> (Empty, Some elt)
-      )
-    | Node { elt; left; right } -> (
-        match compare item elt with
-        | Ordering.Less -> (
-            match remove left item with
-            | _, None -> (node, None)
-            | Empty, removed when right = Empty -> (Leaf elt, removed)
-            | _left, removed -> (Node { elt; left = Empty; right }, removed)
-          )
-        | Ordering.Greater -> (
-            match remove right item with
-            | _, None -> (node, None)
-            | Empty, removed when left = Empty -> (Leaf elt, removed)
-            | _right, removed -> (Node { elt; left; right = Empty }, removed)
-          )
-        | Ordering.Equal ->
-            (* FIXME: Should this be `Empty`? *)
-            (Empty, Some elt)
-      )
-
-  let rec member node item : bool =
-    match node with
-    | Empty -> false
-    | Leaf lf -> lf = item
-    | Node { elt; left; right } -> (
-        match compare item elt with
-        | Ordering.Less -> member left item
-        | Ordering.Greater -> member right item
-        | Ordering.Equal -> true
-      )
 
   (* Thank you Claude for this method. *)
   let pp_tree (show : 'a -> string) (node : 'a node) : string =
@@ -184,4 +118,107 @@ module BST = struct
           }
     in
     build node |> fun { lines; _ } -> String.concat_lines lines
+
+  let compare a b : Ordering.t = Ordering.of_int (compare a b)
+
+  (* TODO: Implement balancing. *)
+  let rec insert item = function
+    | Empty -> Leaf item
+    | Leaf elt as lf -> (
+        match compare item elt with
+        | Ordering.Equal -> lf
+        | Ordering.Less -> Node { elt; left = Leaf item; right = Empty }
+        | Ordering.Greater -> Node { elt; left = Empty; right = Leaf item }
+      )
+    | Node { elt; left; right } as node -> (
+        match compare item elt with
+        | Ordering.Equal -> node
+        | Ordering.Less -> Node { elt; left = insert item left; right }
+        | Ordering.Greater -> Node { elt; left; right = insert item right }
+      )
+
+  let make_node elt left right =
+    match (left, right) with
+    | Empty, Empty -> Leaf elt
+    | _, _ -> Node { elt; left; right }
+
+  let rec pop_min node =
+    match node with
+    | Empty -> (Empty, None)
+    | Leaf lf -> (Empty, Some lf)
+    | Node { elt; left = Empty; right } ->
+        (* The BST invariant guarantees that the minimum value is in the left
+           subtree. In fact, the minimum value is the leftmost value in the tree
+           which means it won't have a left subtree. *)
+        (right, Some elt)
+    | Node { elt; left; right } ->
+        let left, min = pop_min left in
+        (make_node elt left right, min)
+
+  let rec pop_max node =
+    match node with
+    | Empty -> (Empty, None)
+    | Leaf lf -> (Empty, Some lf)
+    | Node { elt; left; right = Empty } ->
+        (* The BST invariant guarantees that the maximum value is in the right
+           subtree. In fact, the maximum value is the rightmost value in the
+           tree which means it won't have a right subtree. *)
+        (left, Some elt)
+    | Node { elt; left; right } ->
+        let right, max = pop_max right in
+        (make_node elt left right, max)
+
+  type shift =
+    | Succ
+    | Pred
+
+  let rec remove ?(shift = Pred) (item : 'a) (node : 'a node) :
+      'a node * 'a option =
+    match node with
+    | Empty -> (Empty, None)
+    | Leaf lf as leaf -> (
+        match compare item lf with
+        | Ordering.Equal -> (Empty, Some lf)
+        | Ordering.Less | Ordering.Greater -> (leaf, None)
+      )
+    | Node { elt; left; right } as node -> (
+        match compare item elt with
+        | Ordering.Equal -> (
+            match shift with
+            | Succ -> (
+                let right, min = pop_min right in
+                match min with
+                | Some new_elt -> (make_node new_elt left right, Some elt)
+                | None -> (node, None)
+              )
+            | Pred -> (
+                let left, max = pop_max left in
+                match max with
+                | Some new_elt -> (make_node new_elt left right, Some elt)
+                | None -> (node, None)
+              )
+          )
+        | Ordering.Less -> (
+            let left, removed = remove ~shift item left in
+            match removed with
+            | Some _ -> (make_node elt left right, removed)
+            | None -> (node, None)
+          )
+        | Ordering.Greater -> (
+            let right, removed = remove ~shift item right in
+            match removed with
+            | Some _ -> (make_node elt left right, removed)
+            | None -> (node, None)
+          )
+      )
+
+  let rec member item = function
+    | Empty -> false
+    | Leaf lf -> lf = item
+    | Node { elt; left; right } -> (
+        match compare item elt with
+        | Ordering.Less -> member item left
+        | Ordering.Greater -> member item right
+        | Ordering.Equal -> true
+      )
 end

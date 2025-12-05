@@ -3,4 +3,4 @@
  (libraries gadt base)
  (inline_tests)
  (preprocess
-  (pps ppx_expect)))
+  (pps ppx_expect ppx_assert)))

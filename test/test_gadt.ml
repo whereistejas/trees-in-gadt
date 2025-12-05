@@ -24,13 +24,13 @@ let%expect_test "remove root node" =
     ┌─┴─┐
     1   5
     |}];
-  let node, removed = BST.remove node 3 in
-  assert (removed = Some 3);
+  let node, removed = BST.remove 3 node in
+  [%test_eq: int option] removed (Some 3);
   Stdio.print_string (BST.pp_tree Int.to_string node);
   [%expect {|
-      5
+      1
     ┌─┴─┐
-    1   .
+    .   5
     |}]
 
 let%expect_test "remove left child node" =
@@ -46,16 +46,16 @@ let%expect_test "remove left child node" =
     ┌─┴─┐   ┌─┴─┐
     0   2   4   6
     |}];
-  let node, removed = BST.remove node 1 in
-  assert (removed = Some 1);
+  let node, removed = BST.remove 1 node in
+  [%test_eq: int option] removed (Some 1);
   Stdio.print_string (BST.pp_tree Int.to_string node);
   [%expect
     {|
           3
       ┌───┴───┐
-      2       5
+      0       5
     ┌─┴─┐   ┌─┴─┐
-    0   .   4   6
+    .   2   4   6
     |}]
 
 let%expect_test "remove right child node" =
@@ -71,26 +71,27 @@ let%expect_test "remove right child node" =
     ┌─┴─┐   ┌─┴─┐
     0   2   4   6
     |}];
-  let node, removed = BST.remove node 5 in
-  assert (removed = Some 5);
+  let node, removed = BST.remove 5 node in
+  [%test_eq: int option] removed (Some 5);
   Stdio.print_string (BST.pp_tree Int.to_string node);
-  [%expect {|
-         3
-      ┌──┴──┐
-      1     .
-    ┌─┴─┐
-    0   2
+  [%expect
+    {|
+          3
+      ┌───┴───┐
+      1       4
+    ┌─┴─┐   ┌─┴─┐
+    0   2   .   6
     |}]
 
 let%expect_test "remove from empty tree" =
-  let node, removed = BST.remove Empty 42 in
-  assert (removed = None);
+  let node, removed = BST.remove 42 BST.Empty in
+  [%test_eq: int option] removed None;
   Stdio.print_string (BST.pp_tree Int.to_string node);
   [%expect {| . |}]
 
 let%expect_test "remove single leaf" =
-  let node, removed = BST.remove (Leaf 1) 1 in
-  assert (removed = Some 1);
+  let node, removed = BST.remove 1 (BST.Leaf 1) in
+  [%test_eq: int option] removed (Some 1);
   assert (node = BST.Empty);
   Stdio.print_string (BST.pp_tree Int.to_string node);
   [%expect {|.|}]
@@ -103,9 +104,14 @@ let%expect_test "remove non-existent element" =
     ┌─┴─┐
     1   5
     |}];
-  let _, removed = BST.remove node 99 in
-  assert (removed = None);
-  [%expect {||}]
+  let node, removed = BST.remove 99 node in
+  [%test_eq: int option] removed None;
+  Stdio.print_string (BST.pp_tree Int.to_string node);
+  [%expect {|
+      3
+    ┌─┴─┐
+    1   5
+    |}]
 
 let%expect_test "remove node with both children non-empty" =
   let node = BST.Node { elt = 3; left = Leaf 1; right = Leaf 5 } in
@@ -115,12 +121,16 @@ let%expect_test "remove node with both children non-empty" =
     ┌─┴─┐
     1   5
     |}];
-  let node, removed = BST.remove node 3 in
-  assert (removed = Some 3);
+  let node, removed = BST.remove 3 node in
+  [%test_eq: int option] removed (Some 3);
   Stdio.print_string (BST.pp_tree Int.to_string node);
-  [%expect {|.|}]
+  [%expect {|
+      1
+    ┌─┴─┐
+    .   5
+    |}]
 
-let%expect_test "remove node with only left child" =
+let%expect_test "remove node with only left child with Predecessor shift" =
   let node = BST.Node { elt = 3; left = Leaf 1; right = Empty } in
   Stdio.print_string (BST.pp_tree Int.to_string node);
   [%expect {|
@@ -128,12 +138,13 @@ let%expect_test "remove node with only left child" =
     ┌─┴─┐
     1   .
     |}];
-  let node, removed = BST.remove node 3 in
-  assert (removed = Some 3);
+  let node, removed = BST.remove 3 node in
+  [%test_eq: int option] removed (Some 3);
   Stdio.print_string (BST.pp_tree Int.to_string node);
-  [%expect {|.|}]
+  [%expect {| 1 |}]
 
-let%expect_test "remove node with only right child" =
+let%expect_test
+    "remove node with only right child with Predecessor and Successor shifts" =
   let node = BST.Node { elt = 3; left = Empty; right = Leaf 5 } in
   Stdio.print_string (BST.pp_tree Int.to_string node);
   [%expect {|
@@ -141,10 +152,12 @@ let%expect_test "remove node with only right child" =
     ┌─┴─┐
     .   5
     |}];
-  let node, removed = BST.remove node 3 in
-  assert (removed = Some 3);
+  let _node, removed = BST.remove ~shift:BST.Pred 3 node in
+  [%test_eq: int option] removed None;
+  let node, removed = BST.remove ~shift:BST.Succ 3 node in
+  [%test_eq: int option] removed (Some 3);
   Stdio.print_string (BST.pp_tree Int.to_string node);
-  [%expect {|.|}]
+  [%expect {| 5 |}]
 
 let%expect_test "remove node where left child is Empty" =
   let left = BST.Node { elt = 1; left = Empty; right = Leaf 2 } in
@@ -157,13 +170,13 @@ let%expect_test "remove node where left child is Empty" =
     ┌─┴─┐
     .   2
     |}];
-  let node, removed = BST.remove node 1 in
-  assert (removed = Some 1);
+  let node, removed = BST.remove ~shift:BST.Succ 1 node in
+  [%test_eq: int option] removed (Some 1);
   Stdio.print_string (BST.pp_tree Int.to_string node);
   [%expect {|
       3
     ┌─┴─┐
-    .   5
+    2   5
     |}]
 
 let%expect_test "remove node where right child is Empty" =
@@ -178,13 +191,13 @@ let%expect_test "remove node where right child is Empty" =
         ┌─┴─┐
         4   .
     |}];
-  let node, removed = BST.remove node 5 in
-  assert (removed = Some 5);
+  let node, removed = BST.remove 5 node in
+  [%test_eq: int option] removed (Some 5);
   Stdio.print_string (BST.pp_tree Int.to_string node);
   [%expect {|
       3
     ┌─┴─┐
-    1   .
+    1   4
     |}]
 
 let%expect_test "node downgrades to leaf when only child removed (left)" =
@@ -195,8 +208,8 @@ let%expect_test "node downgrades to leaf when only child removed (left)" =
     ┌─┴─┐
     1   .
     |}];
-  let node, removed = BST.remove node 1 in
-  assert (removed = Some 1);
+  let node, removed = BST.remove 1 node in
+  [%test_eq: int option] removed (Some 1);
   assert (node = BST.Leaf 3);
   Stdio.print_string (BST.pp_tree Int.to_string node);
   [%expect {|3|}]
@@ -209,8 +222,8 @@ let%expect_test "node downgrades to leaf when only child removed (right)" =
     ┌─┴─┐
     .   5
     |}];
-  let node, removed = BST.remove node 5 in
-  assert (removed = Some 5);
+  let node, removed = BST.remove 5 node in
+  [%test_eq: int option] removed (Some 5);
   assert (node = BST.Leaf 3);
   Stdio.print_string (BST.pp_tree Int.to_string node);
   [%expect {|3|}]

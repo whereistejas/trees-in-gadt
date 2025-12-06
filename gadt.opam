@@ -10,11 +10,12 @@ depends: [
   "ocaml" {>= "5.4.0"}
   "dune" {>= "3.20" & >= "3.20.2"}
   "base" {>= "0.17"}
-  "ppx_inline_test" {>= "0.16.1"}
-  "ppx_assert" {>= "0.16.0"}
-  "ppx_expect" {>= "0.16.0"}
+  "ppx_inline_test" {with-test & >= "0.16.1"}
+  "ppx_assert" {with-test & >= "0.16.0"}
+  "ppx_expect" {with-test & >= "0.16.0"}
   "odoc" {with-doc}
 ]
+depopts: ["afl-persistent"]
 build: [
   ["dune" "subst"] {dev}
   [

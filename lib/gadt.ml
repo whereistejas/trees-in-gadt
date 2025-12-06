@@ -51,6 +51,10 @@ module BST = struct
         right : 'a node;
       }
 
+  type shift =
+    | Succ
+    | Pred
+
   (* Thank you Claude for this method. *)
   let pp_tree (show : 'a -> string) node : string =
     let module Layout = struct
@@ -134,25 +138,23 @@ module BST = struct
     in
     build node |> fun { lines; _ } -> String.concat_lines lines
 
-  (* TODO: Implement balancing. *)
-  let rec insert item ~cmp node =
-    match node with
+  (* FIXME: `insert` does unnecessary allocations in the `Node` branch. *)
+  let rec insert item ~cmp = function
     | Empty -> Leaf item
-    | Leaf elt -> (
-        match cmp item elt with
-        | Ordering.Less -> Node { elt; left = Leaf item; right = Empty }
-        | Ordering.Greater -> Node { elt; left = Empty; right = Leaf item }
-        | Ordering.Equal -> node
+    | Leaf lf -> (
+        match cmp item lf with
+        | Ordering.Less -> Node { elt = lf; left = Leaf item; right = Empty }
+        | Ordering.Greater -> Node { elt = lf; left = Empty; right = Leaf item }
+        | Ordering.Equal -> Leaf lf
       )
-    | Node { elt; left; right } -> (
+    | Node { elt; left; right } as node -> (
         match cmp item elt with
         | Ordering.Less -> Node { elt; left = insert item ~cmp left; right }
         | Ordering.Greater -> Node { elt; left; right = insert item ~cmp right }
         | Ordering.Equal -> node
       )
 
-  let rec member item ~cmp node : bool =
-    match node with
+  let rec member item ~cmp = function
     | Empty -> false
     | Leaf lf -> cmp item lf = Ordering.Equal
     | Node { elt; left; right } -> (
@@ -167,38 +169,31 @@ module BST = struct
     | Empty, Empty -> Leaf elt
     | _, _ -> Node { elt; left; right }
 
-  let rec pop_min node =
-    match node with
+  let rec pop_min = function
     | Empty -> (Empty, None)
     | Leaf lf -> (Empty, Some lf)
     | Node { elt; left = Empty; right } ->
-        (* The BST invariant guarantees that the minimum value is in the left
-           subtree. In fact, the minimum value is the leftmost value in the tree
-           which means it won't have a left subtree. *)
+        (* INVARIANTS: The BST invariant guarantees that the minimum value is in
+           the left subtree. In fact, the minimum value is the leftmost value in
+           the tree which means it won't have a left subtree. *)
         (right, Some elt)
     | Node { elt; left; right } ->
         let left, min = pop_min left in
         (make_node elt left right, min)
 
-  let rec pop_max node =
-    match node with
+  let rec pop_max = function
     | Empty -> (Empty, None)
     | Leaf lf -> (Empty, Some lf)
     | Node { elt; left; right = Empty } ->
-        (* The BST invariant guarantees that the maximum value is in the right
-           subtree. In fact, the maximum value is the rightmost value in the
-           tree which means it won't have a right subtree. *)
+        (* INVARIANTS: The BST invariant guarantees that the maximum value is in
+           the right subtree. In fact, the maximum value is the rightmost value
+           in the tree which means it won't have a right subtree. *)
         (left, Some elt)
     | Node { elt; left; right } ->
         let right, max = pop_max right in
         (make_node elt left right, max)
 
-  type shift =
-    | Succ
-    | Pred
-
-  let rec remove ?(shift = Pred) item ~cmp node : 'a node * 'a option =
-    match node with
+  let rec remove item ~cmp ?(shift = Pred) = function
     | Empty -> (Empty, None)
     | Leaf lf as leaf -> (
         match cmp item lf with
@@ -211,7 +206,7 @@ module BST = struct
             (* Check subtree availability first, then apply shift preference *)
             match (left, right) with
             | Empty, Empty ->
-                (* Invariant: shouldn't happen (would be Leaf), but handle
+                (* WARNING: shouldn't happen (would be Leaf), but handle
                    safely *)
                 (Empty, Some elt)
             | Empty, right ->
@@ -252,18 +247,19 @@ module BST_for_testing = struct
   open Base.Poly
   include BST
 
-  let rec to_list_aux acc = function
-    | Empty -> acc
-    | Leaf elt -> elt :: acc
-    | Node { elt; left; right } ->
-        to_list_aux (elt :: to_list_aux acc right) left
-
-  let to_list node : 'a list = to_list_aux [] node
+  let to_list node : 'a list =
+    let rec to_list_aux acc = function
+      | Empty -> acc
+      | Leaf elt -> elt :: acc
+      | Node { elt; left; right } ->
+          to_list_aux (elt :: to_list_aux acc right) left
+    in
+    to_list_aux [] node
 
   (** Check that all BST invariants hold:
-      - Ordering: left < elt < right
-      - No duplicates (implied by strict ordering)
-      - Leaf normalization: no Node with both children Empty *)
+      - {b Ordering}: [left] < [elt] < [right]
+      - {b No duplicates}: implied by strict ordering
+      - {b Leaf normalization}: no [Node] with both children [Empty] *)
   let check_invariants node ~cmp : bool =
     (* Check if elt is within (lower, upper) bounds *)
     let in_range ~lower ~upper elt =
@@ -279,9 +275,10 @@ module BST_for_testing = struct
       | Empty -> true
       | Leaf elt -> in_range ~lower ~upper elt
       | Node { elt; left; right } ->
-          (* Leaf normalization: shouldn't have both children Empty *)
+          (* INVARIANTS: Leaf normalization - shouldn't have both children
+             Empty *)
           let normalized = not (left = Empty && right = Empty) in
-          (* Ordering: elt must be within bounds *)
+          (* INVARIANTS: Ordering - elt must be within bounds *)
           let ordered = in_range ~lower ~upper elt in
           (* Recurse: left gets upper bound, right gets lower bound *)
           normalized

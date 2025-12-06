@@ -26,4 +26,100 @@
 | Agda     | `stdlib`             | N/A                                  | None                | AVL trees available in `Data.Tree.AVL` module but not for maps/sets |
 | Idris    | `base`/`contrib`     | N/A                                  | None                | No standard tree-based ordered collections                          |
 
+# Show Notes
+
+## Project Goal
+
+Demonstrate how GADTs (Generalized Algebraic Data Types) can encode tree invariants at the type level, eliminating entire classes of bugs that would otherwise require runtime testing.
+
+## The Progression
+
+| Implementation | Balance Invariant  | Can construct invalid tree? |
+| -------------- | ------------------ | --------------------------- |
+| BST            | None (unbalanced)  | N/A                         |
+| 2-3 Tree       | Semantic (promise) | Yes — bugs possible         |
+| GADT 2-3 Tree  | Syntactic (type)   | No — compiler rejects it    |
+
+## Semantic vs Syntactic Invariants
+
+**Semantic invariant:** A property your implementation promises to maintain. The type system doesn't enforce it — bugs can violate it.
+
+```ocaml
+(* Normal 2-3 tree: this compiles but is INVALID *)
+let bad_tree = Node2 (Leaf, 5, Node2 (Leaf, 10, Leaf))
+(*                    ^^^^      ^^^^^^^^^^^^^^^^^^^^
+               depth 0           depth 1 — unbalanced! *)
+```
+
+**Syntactic invariant:** A property encoded in the type system. Invalid states are unrepresentable.
+
+```ocaml
+(* GADT 2-3 tree: this is a TYPE ERROR *)
+let bad_tree = Node2 (Leaf, 5, Node2 (Leaf, 10, Leaf))
+(*                    ^^^^      ^^^^^^^^^^^^^^^^^^^^
+            ('a, zero) tree   ('a, succ zero) tree
+                        ↑ Type mismatch — won't compile! *)
+```
+
+## Why This Matters
+
+- **Normal 2-3 tree:** Need fuzzing/testing to catch balance bugs in `insert`/`remove`
+- **GADT 2-3 tree:** Balance bugs are impossible to write — no fuzzing needed for balance
+
+The GADT version makes invalid states unrepresentable. The compiler becomes your proof assistant.
+
+## Key GADT Technique
+
+Encode height as a type parameter using phantom types:
+
+```ocaml
+type zero
+type 'n succ
+
+type ('a, 'n) tree =
+  | Leaf : ('a, zero) tree
+  | Node2 : ('a, 'n) tree * 'a * ('a, 'n) tree -> ('a, 'n succ) tree
+  | Node3 : ('a, 'n) tree * 'a * ('a, 'n) tree * 'a * ('a, 'n) tree -> ('a, 'n succ) tree
+```
+
+All children of a node must have the same height `'n` — enforced by the type checker.
+
+## Peano Numbers: Each Value is a Different Type
+
+The "trick" is encoding numbers as types using Peano representation:
+
+```ocaml
+type zero                (* a type representing 0 *)
+type 'n succ             (* a type constructor: given 'n, produces "'n succ" *)
+```
+
+| Height | Type                  |
+| ------ | --------------------- |
+| 0      | `zero`                |
+| 1      | `zero succ`           |
+| 2      | `zero succ succ`      |
+| 3      | `zero succ succ succ` |
+
+These are **different types** — as incompatible as `int` and `string`. The compiler's normal type equality checking becomes height equality checking for free:
+
+```ocaml
+(* Works: both children are ('a, zero) tree *)
+Node2 (Leaf, 10, Leaf)
+
+(* Type error: can't unify ('a, zero) with ('a, zero succ) *)
+Node2 (Leaf, 10, Node2 (Leaf, 5, Leaf))
+(* Same as trying to unify int with string! *)
+```
+
+## DSLs vs Data Structures: Two Uses of GADTs
+
+| Aspect             | DSL/Grammar Use                | Data Structure Use           |
+| ------------------ | ------------------------------ | ---------------------------- |
+| Type param encodes | Result type of evaluation      | Structural property (height) |
+| Prevents           | Type errors in interpreters    | Invalid tree shapes          |
+| Used with          | `eval`, `compile`, `interpret` | `insert`, `remove`, `member` |
+| Guarantees         | "This expr returns an int"     | "This tree is balanced"      |
+
+Both use GADTs to make **invalid states unrepresentable** — just in different domains.
+
 # GADTs

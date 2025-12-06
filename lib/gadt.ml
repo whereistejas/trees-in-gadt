@@ -289,31 +289,196 @@ module BST_for_testing = struct
     loop ~lower:None ~upper:None node
 end
 
-(*
- * let invariants =
- *   let in_range lower upper compare_elt v =
- *     (match lower with
- *      | None -> true
- *      | Some lower -> compare_elt lower v < 0)
- *     &&
- *     match upper with
- *     | None -> true
- *     | Some upper -> compare_elt v upper < 0
- *   in
- *   let rec loop lower upper compare_elt t =
- *     match t with
- *     | Empty -> true
- *     | Leaf { elt = v } -> in_range lower upper compare_elt v
- *     | Node { left = l; elt = v; right = r; height = h; size = n } ->
- *       let hl = height l
- *       and hr = height r in
- *       abs (hl - hr) <= 2
- *       && h = max hl hr + 1
- *       && n = length l + length r + 1
- *       && in_range lower upper compare_elt v
- *       && loop lower (Some v) compare_elt l
- *       && loop (Some v) upper compare_elt r
- *   in
- *   fun t ~compare_elt -> loop None None compare_elt t
- * ;;
- *)
+module AVL = struct
+  open Base.Poly
+
+  (** A self-balancing BST data structure.
+
+      We defined a balanced tree by calculating the [skew] for that node where,
+      [skew = (height right) - (height left)]
+
+      The [height] of a node is the length of the longest downward path from
+      this node, counting the number of edges where,
+      [height = max (height left) (height right) + 1]
+
+      {2 Invariants}
+      - We maintain the BST invariant, where [left < root < right].
+      - We maintain the skew for each node is either [-1, 0 , 1]
+
+      `Base` has its own `Avltreee` implementation that we can use for fuzz
+      testing. *)
+  type 'a node =
+    | Empty
+    | Leaf of 'a
+    | Node of {
+        elt : 'a;
+        left : 'a node;
+        right : 'a node;
+      }
+
+  let rec height node =
+    (* The order of the patterns is important. *)
+    match node with
+    | Empty -> 0
+    | Leaf _ -> 1
+    | Node { elt = _; left; right } -> 1 + max (height left) (height right)
+
+  (* Thank you Claude for this method. *)
+  let pp_tree (show : 'a -> string) node : string =
+    let module Layout = struct
+      type t = {
+        lines : string list;
+        width : int;
+        root_pos : int;
+      }
+    end in
+    let repeat_str s n =
+      if n <= 0 then "" else List.init n ~f:(Fn.const s) |> String.concat
+    in
+    let pad_right ~width s =
+      let padding = width - String.length s in
+      if padding > 0 then s ^ String.make padding ' ' else s
+    in
+    let spaces n = String.make n ' ' in
+    let make_branch ~left_pos ~root_pos ~right_pos =
+      String.concat
+        [
+          spaces left_pos;
+          "┌";
+          repeat_str "─" (root_pos - left_pos - 1);
+          "┴";
+          repeat_str "─" (right_pos - root_pos - 1);
+          "┐";
+        ]
+    in
+    let pad_lines ~width ~target_len lines =
+      let padded = List.map lines ~f:(pad_right ~width) in
+      let extra = target_len - List.length lines in
+      if extra > 0 then padded @ List.init extra ~f:(Fn.const (spaces width))
+      else padded
+    in
+    let gap = 3 in
+    let rec build node : Layout.t =
+      match node with
+      | Empty -> { lines = [ "." ]; width = 1; root_pos = 0 }
+      | Leaf v ->
+          let s = show v ^ "(h=" ^ Int.to_string (height node) ^ ")" in
+          let width = String.length s in
+          { lines = [ s ]; width; root_pos = width / 2 }
+      | Node { elt; left; right } ->
+          let Layout.
+                { lines = left_lines; width = left_w; root_pos = left_root } =
+            build left
+          in
+          let Layout.
+                { lines = right_lines; width = right_w; root_pos = right_root }
+              =
+            build right
+          in
+          let total_w = left_w + gap + right_w in
+          let right_anchor = left_w + gap + right_root in
+          let root_pos = (left_root + right_anchor) / 2 in
+          let val_str = show elt ^ "(h=" ^ Int.to_string (height node) ^ ")" in
+          let val_start = root_pos - (String.length val_str / 2) in
+          let value_line = spaces (max 0 val_start) ^ val_str in
+          let branch_line =
+            make_branch ~left_pos:left_root ~root_pos ~right_pos:right_anchor
+          in
+          let max_lines =
+            max (List.length left_lines) (List.length right_lines)
+          in
+          let left_padded =
+            pad_lines ~width:left_w ~target_len:max_lines left_lines
+          in
+          let right_padded =
+            pad_lines ~width:right_w ~target_len:max_lines right_lines
+          in
+          let child_lines =
+            List.map2_exn left_padded right_padded ~f:(fun l r ->
+                String.concat [ l; spaces gap; r ]
+            )
+          in
+          {
+            lines = value_line :: branch_line :: child_lines;
+            width = total_w;
+            root_pos;
+          }
+    in
+    build node |> fun { lines; _ } -> String.concat_lines lines
+
+  type shift =
+    | Succ
+    | Pred
+
+  type skew =
+    | Same
+    | Left of int
+    | Right of int
+  [@@deriving sexp, equal]
+
+  let pp_skew skew = Sexp.to_string_hum (sexp_of_skew skew)
+
+  let skew node =
+    match node with
+    | Empty -> Same
+    | Leaf _ -> Same
+    | Node { elt = _; left; right } ->
+        let skew = height right - height left in
+        if skew < -1 then Left skew else if skew > 1 then Right skew else Same
+
+  let make_node elt left right = Node { elt; left; right }
+
+  let rec rotate_right elt left_child right_child =
+    match left_child with
+    | Node { elt = l_elt; left = l_left; right = l_right } ->
+        let new_right = make_node elt l_right right_child in
+        let balanced_right = balance new_right in
+        make_node l_elt l_left balanced_right
+    | Empty | Leaf _ -> assert false
+
+  and rotate_left elt left_child right_child =
+    match right_child with
+    | Node { elt = r_elt; left = r_left; right = r_right } ->
+        let new_left = make_node elt left_child r_left in
+        let balanced_left = balance new_left in
+        make_node r_elt balanced_left r_right
+    | Empty | Leaf _ -> assert false
+
+  and balance node =
+    (* printf "Balancing node:\n%s" (pp_tree Int.to_string node); *)
+    match node with
+    | Empty -> Empty
+    | Leaf _ -> node
+    | Node { elt; left = left_child; right = right_child } -> (
+        let skew = skew node in
+        match skew with
+        | Same -> node
+        | Left _ -> rotate_right elt left_child right_child
+        | Right _ -> rotate_left elt left_child right_child
+      )
+
+  let rec insert item ~cmp node =
+    ( match node with
+      | Empty -> Leaf item
+      | Leaf lf -> (
+          (* FIXME: The allocation in `Leaf lf` is wasteful, just return the
+             existing leaf. *)
+          match cmp item lf with
+          | Ordering.Equal -> Leaf lf
+          | Ordering.Less -> Node { elt = lf; left = Leaf item; right = Empty }
+          | Ordering.Greater ->
+              Node { elt = item; left = Leaf lf; right = Empty }
+        )
+      | Node { elt; left; right } -> (
+          match cmp item elt with
+          | Ordering.Equal -> node
+          | Ordering.Less -> Node { elt; left = insert item ~cmp left; right }
+          | Ordering.Greater ->
+              Node { elt; left; right = insert item ~cmp right }
+        )
+      )
+    |> balance
+
+  let remove _item ~cmp:_ _shift _node : 'a node * 'a option = failwith "TODO"
+  let member _item ~cmp:_ _node : bool = failwith "TODO"
+end

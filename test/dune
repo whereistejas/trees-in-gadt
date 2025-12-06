@@ -1,6 +1,6 @@
 (library
  (name test_gadt)
- (modules test_gadt)
+ (modules bst avl)
  (libraries gadt base)
  (inline_tests)
  (preprocess

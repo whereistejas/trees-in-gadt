@@ -1,4 +1,6 @@
 (library
  (name gadt)
  (public_name gadt)
- (libraries base))
+ (libraries base stdio)
+ (preprocess
+  (pps ppx_sexp_conv ppx_compare)))

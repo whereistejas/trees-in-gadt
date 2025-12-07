@@ -542,33 +542,33 @@ module AVL = struct
         (pp_tree ~indent Int.to_string result);
     result
 
-  let rec pop_min = function
-    | Empty -> (Empty, None)
-    | Leaf lf -> (Empty, Some lf)
-    | Node { elt; left = Empty; right } ->
-        (* INVARIANTS: The BST invariant guarantees that the minimum value is in
-           the left subtree. In fact, the minimum value is the leftmost value in
-           the tree which means it won't have a left subtree. *)
-        (right, Some elt)
-    | Node { elt; left; right } ->
-        let left, min = pop_min left in
-        (make_node elt left right, min)
+  (** Balance the tree in a (tree, value) tuple *)
+  let balance_fst (tree, value) = (balance tree, value)
 
-  let rec pop_max = function
-    | Empty -> (Empty, None)
-    | Leaf lf -> (Empty, Some lf)
-    | Node { elt; left; right = Empty } ->
-        (* INVARIANTS: The BST invariant guarantees that the maximum value is in
-           the right subtree. In fact, the maximum value is the rightmost value
-           in the tree which means it won't have a right subtree. *)
-        (left, Some elt)
-    | Node { elt; left; right } ->
-        let right, max = pop_max right in
-        (make_node elt left right, max)
+  let rec pop_min node =
+    ( match node with
+      | Empty -> (Empty, None)
+      | Leaf lf -> (Empty, Some lf)
+      | Node { elt; left = Empty; right } -> (right, Some elt)
+      | Node { elt; left; right } ->
+          let left, min = pop_min left in
+          (make_node elt left right, min)
+      )
+    |> balance_fst
+
+  let rec pop_max node =
+    ( match node with
+      | Empty -> (Empty, None)
+      | Leaf lf -> (Empty, Some lf)
+      | Node { elt; left; right = Empty } -> (left, Some elt)
+      | Node { elt; left; right } ->
+          let right, max = pop_max right in
+          (make_node elt left right, max)
+      )
+    |> balance_fst
 
   let rec remove item ~cmp ?(shift = Pred) node =
-    let node, removed =
-      match node with
+    ( match node with
       | Empty -> (Empty, None)
       | Leaf lf as leaf -> (
           match cmp item lf with
@@ -578,22 +578,15 @@ module AVL = struct
       | Node { elt; left; right } as node -> (
           match cmp item elt with
           | Ordering.Equal -> (
-              (* Check subtree availability first, then apply shift preference *)
               match (left, right) with
-              | Empty, Empty ->
-                  (* WARNING: shouldn't happen (would be Leaf), but handle
-                   safely *)
-                  (Empty, Some elt)
+              | Empty, Empty -> (Empty, Some elt)
               | Empty, right ->
-                  (* Only right subtree exists - use successor *)
                   let right, min = pop_min right in
                   (make_node (Option.value_exn min) Empty right, Some elt)
               | left, Empty ->
-                  (* Only left subtree exists - use predecessor *)
                   let left, max = pop_max left in
                   (make_node (Option.value_exn max) left Empty, Some elt)
               | left, right -> (
-                  (* Both subtrees exist - use shift preference *)
                   match shift with
                   | Succ ->
                       let right, min = pop_min right in
@@ -616,8 +609,8 @@ module AVL = struct
               | None -> (node, None)
             )
         )
-    in
-    (balance node, removed)
+      )
+    |> balance_fst
 
   let rec member item ~cmp = function
     | Empty -> false

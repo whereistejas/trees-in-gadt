@@ -426,7 +426,9 @@ module AVL = struct
         let skew = height right - height left in
         if skew < -1 then Left skew else if skew > 1 then Right skew else Same
 
-  let make_node elt left right = Node { elt; left; right }
+  let make_node elt left right =
+    if left = Empty && right = Empty then Leaf elt
+    else Node { elt; left; right }
 
   let rec rotate_right elt left_child right_child =
     match left_child with

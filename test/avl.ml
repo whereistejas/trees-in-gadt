@@ -335,7 +335,7 @@ let%test_unit "qcheck 2" =
   let tree = AVL.insert 59 ~cmp tree in
   assert (AVL.check_and_report tree ~cmp ~show:Int.to_string) *)
 
-let%test_unit "qcheck 3" =
+let%expect_test "qcheck 3" =
   let tree = AVL.Empty in
   let tree = AVL.insert 29 ~cmp tree in
   let tree = AVL.insert 20 ~cmp tree in
@@ -346,7 +346,12 @@ let%test_unit "qcheck 3" =
   [%test_eq: int option] removed None;
   let tree, removed = AVL.remove 81 ~cmp tree in
   [%test_eq: int option] removed None;
-  let tree = AVL.insert ~debug:true 43 ~cmp tree in
+  let tree = AVL.insert 43 ~cmp tree in
+  assert (AVL.check_and_report tree ~cmp ~show:Int.to_string);
   Stdio.print_string (AVL.pp_tree Int.to_string tree);
-  Stdio.print_endline "---";
-  assert (AVL.check_and_report tree ~cmp ~show:Int.to_string)
+  [%expect
+    {|
+         43(h=2)
+       ┌────┴─────┐
+    29(h=1)   115(h=1)
+    |}]

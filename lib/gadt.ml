@@ -444,13 +444,15 @@ module AVL = struct
         match right with
         | Node { elt = r_elt; left = r_left; right = r_right } ->
             make_node r_elt (make_node elt left r_left) r_right
-        | Empty | Leaf _ -> assert false
+        | Leaf r_elt -> make_node r_elt (make_node elt left Empty) Empty
+        | Empty -> assert false
       )
     | Right -> (
         match left with
         | Node { elt = l_elt; left = l_left; right = l_right } ->
             make_node l_elt l_left (make_node elt l_right right)
-        | Empty | Leaf _ -> assert false
+        | Leaf l_elt -> make_node l_elt Empty (make_node elt Empty right)
+        | Empty -> assert false
       )
     | Same -> assert false
 

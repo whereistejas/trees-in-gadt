@@ -34,12 +34,32 @@ module AVL = Gadt.AVL_for_testing
 
 let cmp a b : Ordering.t = Ordering.of_int (compare a b)
 
-(** Generator for insert/remove operations *)
-let op_gen : [ `Insert of int | `Remove of int ] QCheck.Gen.t =
+(** Generator for insert/remove operations that tracks inserted elements.
+    Removes mostly happen on values that have been inserted (80%), but 20% of
+    the time remove a random value (which may not exist). *)
+let ops_gen : [ `Insert of int | `Remove of int ] list QCheck.Gen.t =
   let open QCheck.Gen in
-  let* is_remove = bool in
-  let* value = int_range 0 127 in
-  return (if is_remove then `Remove value else `Insert value)
+  let rec gen_ops n inserted acc =
+    if n <= 0 then return (List.rev acc)
+    else
+      let* is_remove = bool in
+      if is_remove then
+        let* use_random = float_range 0.0 1.0 in
+        if Float.( < ) use_random 0.2 || Set.is_empty inserted then
+          (* 20% chance: remove random value (may not exist) *)
+          let* value = int_range 0 127 in
+          gen_ops (n - 1) (Set.remove inserted value) (`Remove value :: acc)
+        else
+          (* 80% chance: remove an existing value *)
+          let* idx = int_bound (Set.length inserted - 1) in
+          let value = Set.nth inserted idx |> Option.value_exn in
+          gen_ops (n - 1) (Set.remove inserted value) (`Remove value :: acc)
+      else
+        let* value = int_range 0 127 in
+        gen_ops (n - 1) (Set.add inserted value) (`Insert value :: acc)
+  in
+  let* len = int_range 1 100 in
+  gen_ops len (Set.empty (module Int)) []
 
 (** Apply a list of operations to an AVL tree *)
 let apply_ops ops =
@@ -69,19 +89,17 @@ let avltree_to_list tree =
   Avltree.iter tree ~f:(fun ~key ~data:_ -> acc := key :: !acc);
   List.rev !acc
 
+(** Pretty printer for operations *)
+let pp_op op =
+  match op with
+  | `Insert x -> Printf.sprintf "Insert %d" x
+  | `Remove x -> Printf.sprintf "Remove %d" x
+
 (** Arbitrary for operations list with shrinking *)
 let ops_arb =
   QCheck.make
-    ~print:
-      QCheck.Print.(
-        list (fun op ->
-            match op with
-            | `Insert x -> Printf.sprintf "Insert %d" x
-            | `Remove x -> Printf.sprintf "Remove %d" x
-        )
-      )
-    ~shrink:QCheck.Shrink.list
-    QCheck.Gen.(list_size (int_range 1 100) op_gen)
+    ~print:QCheck.Print.(list pp_op)
+    ~shrink:QCheck.Shrink.list ops_gen
 
 (* === Property Tests === *)
 [@@@warning "-32"]
@@ -109,14 +127,7 @@ let ops_with_value_arb =
   QCheck.make
     ~print:(fun (ops, x) ->
       Printf.sprintf "ops: [%s], x: %d"
-        (String.concat ~sep:"; "
-           (List.map ops ~f:(fun op ->
-                match op with
-                | `Insert v -> Printf.sprintf "Insert %d" v
-                | `Remove v -> Printf.sprintf "Remove %d" v
-            )
-           )
-        )
+        (String.concat ~sep:"; " (List.map ops ~f:pp_op))
         x
     )
     ~shrink:(fun (ops, x) ->
@@ -125,7 +136,7 @@ let ops_with_value_arb =
         <+> map (fun x' -> (ops, x')) (QCheck.Shrink.int x)
       )
     )
-    QCheck.Gen.(pair (list_size (int_range 1 100) op_gen) (int_range 0 127))
+    QCheck.Gen.(pair ops_gen (int_range 0 127))
 
 let test_membership_properties =
   QCheck.Test.make ~count:5000 ~name:"insert/remove membership properties"
@@ -144,6 +155,6 @@ let test_membership_properties =
 
 (* === Run Tests === *)
 
-(* let _ =
+let _ =
   let open QCheck_runner in
-  run_tests_main [ test_all_properties; test_membership_properties ] *)
+  run_tests_main [ test_all_properties; test_membership_properties ]

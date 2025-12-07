@@ -36,7 +36,7 @@ let%test_unit "assert height of balanced tree is correct" =
 
 let%test_unit "assert skew of unbalanced tree is correct" =
   let tree = gen_unbalanced_tree 7 in
-  [%test_eq: AVL.skew] (AVL.skew tree) (AVL.Left (-6))
+  [%test_eq: int] (AVL.skew tree) (-6)
 
 (* ============================================================================
    Section 1: Rotation Edge Cases
@@ -220,14 +220,14 @@ let%expect_test "insert [1; 2] - skew should be valid" =
     List.fold [ 1; 2 ] ~init:AVL.Empty ~f:(fun acc x -> AVL.insert x ~cmp acc)
   in
   Stdio.print_string (AVL.pp_tree Int.to_string tree);
-  Stdio.printf "\nSkew: %s\n" (AVL.pp_skew (AVL.skew tree));
+  Stdio.printf "\nLeaning: %s\n" (AVL.pp_leaning (AVL.leaning tree));
   [%expect
     {|
        2(h=2)
        ┌──┴──┐
     1(h=1)   .
 
-    Skew: Same
+    Leaning: Left
     |}]
 
 let%expect_test "insert [1; 2; 3] - triggers rotation, check structure" =
@@ -235,14 +235,14 @@ let%expect_test "insert [1; 2; 3] - triggers rotation, check structure" =
     List.fold [ 1; 2; 3 ] ~init:AVL.Empty ~f:(fun acc x -> AVL.insert x ~cmp acc)
   in
   Stdio.print_string (AVL.pp_tree Int.to_string tree);
-  Stdio.printf "\nSkew: %s\n" (AVL.pp_skew (AVL.skew tree));
+  Stdio.printf "\nLeaning: %s\n" (AVL.pp_leaning (AVL.leaning tree));
   [%expect
     {|
         2(h=2)
        ┌───┴────┐
     1(h=1)   3(h=1)
 
-    Skew: Same
+    Leaning: Same
     |}]
 
 (* ============================================================================
@@ -308,3 +308,29 @@ let%test "remove with rebalancing maintains invariants" =
   in
   let tree, _ = AVL.remove 1 ~cmp tree in
   AVL.check_invariants tree ~cmp
+
+(* ============================================================================
+   Section 8: QCheck
+   ============================================================================ *)
+
+let%expect_test "inserts in random order and checks invariants" =
+  let tree =
+    List.fold [ 1; 3; 2 ] ~init:AVL.Empty ~f:(fun acc x -> AVL.insert x ~cmp acc)
+  in
+  Stdio.print_string (AVL.pp_tree Int.to_string tree);
+  [%expect {|
+        2(h=2)
+       ┌───┴────┐
+    1(h=1)   3(h=1)
+    |}]
+
+let%test_unit "qcheck 2" =
+  let tree = AVL.Empty in
+  let tree = AVL.insert 44 ~cmp tree in
+  let tree = AVL.insert 24 ~cmp tree in
+  let tree = AVL.insert 67 ~cmp tree in
+  let tree, _ = AVL.remove 17 ~cmp tree in
+  let tree = AVL.insert 111 ~cmp tree in
+  let tree = AVL.insert 46 ~cmp tree in
+  let tree = AVL.insert 59 ~cmp tree in
+  assert (AVL.check_and_report tree ~cmp ~show:Int.to_string)

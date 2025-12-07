@@ -86,70 +86,64 @@ let ops_arb =
 (* === Property Tests === *)
 [@@@warning "-32"]
 
-let test_invariants =
-  QCheck.Test.make ~count:10000 ~name:"AVL tree maintains invariants" ops_arb
-    (fun ops ->
-      let tree = apply_ops ops in
-      AVL.check_and_report tree ~cmp ~show:Int.to_string
-  )
-
-let test_contents_match_reference =
-  QCheck.Test.make ~count:10000 ~name:"AVL tree contents match reference"
+(** Combined test that checks all properties on the same input *)
+let test_all_properties =
+  QCheck.Test.make ~count:10000 ~name:"AVL tree satisfies all properties"
     ops_arb (fun ops ->
       let tree = apply_ops ops in
+      let tree_list = avl_to_list tree in
+      (* Property 1: invariants hold *)
+      let invariants_ok = AVL.check_and_report tree ~cmp ~show:Int.to_string in
+      (* Property 2: contents match reference implementation *)
       let ref_tree = apply_ops_ref ops in
-      let tree_list = avl_to_list tree in
       let ref_list = avltree_to_list ref_tree in
-      List.equal Int.equal tree_list ref_list
+      let contents_ok = List.equal Int.equal tree_list ref_list in
+      (* Property 3: output is sorted *)
+      let sorted_ok = List.is_sorted tree_list ~compare:Int.compare in
+      invariants_ok && contents_ok && sorted_ok
   )
 
-let test_sorted_output =
-  QCheck.Test.make ~count:10000 ~name:"AVL tree to_list is sorted" ops_arb
-    (fun ops ->
+(** Combined test for insert/remove membership properties. Arbitrary for ops + a
+    test value, with shrinking and printing *)
+let ops_with_value_arb =
+  QCheck.make
+    ~print:(fun (ops, x) ->
+      Printf.sprintf "ops: [%s], x: %d"
+        (String.concat ~sep:"; "
+           (List.map ops ~f:(fun op ->
+                match op with
+                | `Insert v -> Printf.sprintf "Insert %d" v
+                | `Remove v -> Printf.sprintf "Remove %d" v
+            )
+           )
+        )
+        x
+    )
+    ~shrink:(fun (ops, x) ->
+      QCheck.Iter.(
+        map (fun ops' -> (ops', x)) (QCheck.Shrink.list ops)
+        <+> map (fun x' -> (ops, x')) (QCheck.Shrink.int x)
+      )
+    )
+    QCheck.Gen.(pair (list_size (int_range 1 100) op_gen) (int_range 0 127))
+
+let test_membership_properties =
+  QCheck.Test.make ~count:5000 ~name:"insert/remove membership properties"
+    ops_with_value_arb (fun (ops, x) ->
       let tree = apply_ops ops in
-      let tree_list = avl_to_list tree in
-      List.is_sorted tree_list ~compare:Int.compare
-  )
-
-let test_insert_then_member =
-  QCheck.Test.make ~count:5000 ~name:"insert x then x is in tree"
-    QCheck.(
-      pair
-        (make Gen.(list_size (int_range 0 50) (int_range 0 127)))
-        (make Gen.(int_range 0 127))
-    )
-    (fun (ops, x) ->
-      let initial_ops = List.map ops ~f:(fun v -> `Insert v) in
-      let tree = apply_ops initial_ops in
+      (* Property 1: insert x then x is in tree *)
       let tree_with_x = AVL.insert x ~cmp tree in
-      List.mem (avl_to_list tree_with_x) x ~equal:Int.equal
-    )
-
-let test_remove_then_not_member =
-  QCheck.Test.make ~count:5000 ~name:"remove x then x is not in tree"
-    QCheck.(
-      pair
-        (make Gen.(list_size (int_range 1 50) (int_range 0 127)))
-        (make Gen.(int_range 0 127))
-    )
-    (fun (ops, x) ->
-      let initial_ops = List.map ops ~f:(fun v -> `Insert v) in
-      let tree = apply_ops initial_ops in
+      let insert_ok = List.mem (avl_to_list tree_with_x) x ~equal:Int.equal in
+      (* Property 2: remove x then x is not in tree *)
       let tree_without_x, _ = AVL.remove x ~cmp tree in
-      not (List.mem (avl_to_list tree_without_x) x ~equal:Int.equal)
-    )
+      let remove_ok =
+        not (List.mem (avl_to_list tree_without_x) x ~equal:Int.equal)
+      in
+      insert_ok && remove_ok
+  )
 
 (* === Run Tests === *)
 
 (* let _ =
-   let open QCheck_runner in
-  let tests =
-    [
-      test_invariants;
-      test_contents_match_reference;
-      test_sorted_output;
-      test_insert_then_member;
-      test_remove_then_not_member;
-    ]
-  in
-  run_tests_main tests *)
+  let open QCheck_runner in
+  run_tests_main [ test_all_properties; test_membership_properties ] *)

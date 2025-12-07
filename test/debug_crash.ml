@@ -30,8 +30,9 @@ let () =
               t
         in
         Stdio.print_endline (AVL.pp_tree Int.to_string tree');
-        Stdio.printf "Height: %d, Skew: %s\n" (AVL.height tree')
-          (AVL.pp_skew (AVL.skew tree'));
+        Stdio.printf "Height: %d, Skew: %d, Leaning: %s\n" (AVL.height tree')
+          (AVL.skew tree')
+          (AVL.pp_leaning (AVL.leaning tree'));
         Stdio.print_endline "---";
         tree'
     )

@@ -328,7 +328,7 @@ module AVL = struct
     | Node { elt = _; left; right } -> 1 + max (height left) (height right)
 
   (* Thank you Claude for this method. *)
-  let pp_tree (show : 'a -> string) node : string =
+  let pp_tree ?(indent = "") (show : 'a -> string) node : string =
     let module Layout = struct
       type t = {
         lines : string list;
@@ -408,65 +408,83 @@ module AVL = struct
             root_pos;
           }
     in
-    build node |> fun { lines; _ } -> String.concat_lines lines
+    build node |> fun { lines; _ } ->
+    lines |> List.map ~f:(fun line -> indent ^ line) |> String.concat_lines
 
   type shift =
     | Succ
     | Pred
 
-  type skew =
+  type leaning =
     | Same
-    | Left of int
-    | Right of int
+    | Left
+    | Right
   [@@deriving sexp, compare]
 
-  let pp_skew skew = Sexp.to_string_hum (sexp_of_skew skew)
+  let pp_leaning leaning = Sexp.to_string_hum (sexp_of_leaning leaning)
 
   let skew node =
     match node with
-    | Empty -> Same
-    | Leaf _ -> Same
-    | Node { elt = _; left; right } ->
-        let skew = height right - height left in
-        if skew < -1 then Left skew else if skew > 1 then Right skew else Same
+    | Empty | Leaf _ -> 0
+    | Node { elt = _; left; right } -> height right - height left
+
+  (** Returns true if the node leans left (left subtree is taller). Used to
+      detect zigzag cases for double rotations. *)
+  let leaning node =
+    if skew node < 0 then Left else if skew node > 0 then Right else Same
 
   let make_node elt left right =
     if left = Empty && right = Empty then Leaf elt
     else Node { elt; left; right }
 
-  let rec rotate_right elt left_child right_child =
-    match left_child with
-    | Node { elt = l_elt; left = l_left; right = l_right } ->
-        let new_right = make_node elt l_right right_child in
-        let balanced_right = balance new_right in
-        make_node l_elt l_left balanced_right
-    | Empty | Leaf _ -> assert false
-
-  and rotate_left elt left_child right_child =
-    match right_child with
-    | Node { elt = r_elt; left = r_left; right = r_right } ->
-        let new_left = make_node elt left_child r_left in
-        let balanced_left = balance new_left in
-        make_node r_elt balanced_left r_right
-    | Empty | Leaf _ -> assert false
-
-  and balance node =
-    match node with
-    | Empty -> Empty
-    | Leaf _ -> node
-    | Node { elt; left = left_child; right = right_child } -> (
-        let skew = skew node in
-        match skew with
-        | Same -> node
-        | Left _ -> rotate_right elt left_child right_child
-        | Right _ -> rotate_left elt left_child right_child
+  (** Rotate a node in the given direction *)
+  let rotate dir elt left right =
+    match dir with
+    | Left -> (
+        match right with
+        | Node { elt = r_elt; left = r_left; right = r_right } ->
+            make_node r_elt (make_node elt left r_left) r_right
+        | Empty | Leaf _ -> assert false
       )
+    | Right -> (
+        match left with
+        | Node { elt = l_elt; left = l_left; right = l_right } ->
+            make_node l_elt l_left (make_node elt l_right right)
+        | Empty | Leaf _ -> assert false
+      )
+    | Same -> assert false
+
+  let balance node =
+    match node with
+    | Empty | Leaf _ -> node
+    | Node { elt; left; right } ->
+        let s = skew node in
+        if s < -1 then
+          (* Left-heavy: maybe double rotate if left child leans right *)
+          let left =
+            if leaning left = Right then
+              match left with
+              | Node { elt; left; right } -> rotate Left elt left right
+              | Empty | Leaf _ -> assert false
+            else left
+          in
+          rotate Right elt left right
+        else if s > 1 then
+          (* Right-heavy: maybe double rotate if right child leans left *)
+          let right =
+            if leaning right = Left then
+              match right with
+              | Node { elt; left; right } -> rotate Right elt left right
+              | Empty | Leaf _ -> assert false
+            else right
+          in
+          rotate Left elt left right
+        else node
 
   let rec insert item ~cmp node =
     ( match node with
       | Empty -> Leaf item
       | Leaf lf -> (
-          (* FIXME: The allocation in `Leaf lf` is wasteful, just return the existing leaf. *)
           match cmp item lf with
           | Ordering.Equal -> Leaf lf
           | Ordering.Less -> Node { elt = lf; left = Leaf item; right = Empty }
@@ -592,7 +610,7 @@ module AVL_for_testing = struct
       }
     | Unbalanced of {
         elt : int;
-        skew : skew;
+        leaning : leaning;
       }
     | Not_normalized of { elt : int }
 
@@ -601,8 +619,8 @@ module AVL_for_testing = struct
         Printf.sprintf "Out_of_range: elt=%d, lower=%s, upper=%s" elt
           (Option.value_map lower ~default:"None" ~f:Int.to_string)
           (Option.value_map upper ~default:"None" ~f:Int.to_string)
-    | Unbalanced { elt; skew } ->
-        Printf.sprintf "Unbalanced: elt=%d, skew=%s" elt (pp_skew skew)
+    | Unbalanced { elt; leaning } ->
+        Printf.sprintf "Unbalanced: elt=%d, skew=%s" elt (pp_leaning leaning)
     | Not_normalized { elt } ->
         Printf.sprintf "Not_normalized: elt=%d (Node with both children Empty)"
           elt
@@ -630,9 +648,9 @@ module AVL_for_testing = struct
             else [ Out_of_range { elt; lower; upper } ]
           in
           let balance_violations =
-            match skew node with
-            | Same -> []
-            | s -> [ Unbalanced { elt; skew = s } ]
+            let s = skew node in
+            if s >= -1 && s <= 1 then []
+            else [ Unbalanced { elt; leaning = leaning node } ]
           in
           let normalization_violations =
             if left = Empty && right = Empty then [ Not_normalized { elt } ]

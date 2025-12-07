@@ -560,7 +560,15 @@ module AVL = struct
     in
     (balance node, removed)
 
-  let member _item ~cmp:_ _node : bool = failwith "TODO"
+  let rec member item ~cmp = function
+    | Empty -> false
+    | Leaf lf -> cmp item lf = Ordering.Equal
+    | Node { elt; left; right } -> (
+        match cmp item elt with
+        | Ordering.Less -> member item ~cmp left
+        | Ordering.Greater -> member item ~cmp right
+        | Ordering.Equal -> true
+      )
 end
 
 module AVL_for_testing = struct

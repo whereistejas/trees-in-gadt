@@ -444,6 +444,7 @@ module AVL = struct
         match right with
         | Node { elt = r_elt; left = r_left; right = r_right } ->
             make_node r_elt (make_node elt left r_left) r_right
+        (* NOTE: Struggled here *)
         | Leaf r_elt -> make_node r_elt (make_node elt left Empty) Empty
         | Empty -> assert false
       )
@@ -451,6 +452,7 @@ module AVL = struct
         match left with
         | Node { elt = l_elt; left = l_left; right = l_right } ->
             make_node l_elt l_left (make_node elt l_right right)
+        (* NOTE: Struggled here *)
         | Leaf l_elt -> make_node l_elt Empty (make_node elt Empty right)
         | Empty -> assert false
       )
@@ -484,93 +486,91 @@ module AVL = struct
         else node
 
   let rec insert item ~cmp node =
-    ( match node with
-      | Empty -> Leaf item
-      | Leaf lf -> (
-          match cmp item lf with
-          | Ordering.Equal -> Leaf lf
-          | Ordering.Less -> Node { elt = lf; left = Leaf item; right = Empty }
-          | Ordering.Greater ->
-              Node { elt = item; left = Leaf lf; right = Empty }
-        )
-      | Node { elt; left; right } -> (
-          match cmp item elt with
-          | Ordering.Equal -> node
-          | Ordering.Less -> Node { elt; left = insert item ~cmp left; right }
-          | Ordering.Greater ->
-              Node { elt; left; right = insert item ~cmp right }
-        )
+    begin match node with
+    | Empty -> Leaf item
+    | Leaf lf -> (
+        match cmp item lf with
+        | Ordering.Equal -> Leaf lf
+        | Ordering.Less -> Node { elt = lf; left = Leaf item; right = Empty }
+        | Ordering.Greater -> Node { elt = item; left = Leaf lf; right = Empty }
       )
+    | Node { elt; left; right } -> (
+        match cmp item elt with
+        | Ordering.Equal -> node
+        | Ordering.Less -> Node { elt; left = insert item ~cmp left; right }
+        | Ordering.Greater -> Node { elt; left; right = insert item ~cmp right }
+      )
+    end
     |> balance
 
   (** Balance the tree in a (tree, value) tuple *)
   let balance_fst (tree, value) = (balance tree, value)
 
   let rec pop_min node =
-    ( match node with
-      | Empty -> (Empty, None)
-      | Leaf lf -> (Empty, Some lf)
-      | Node { elt; left = Empty; right } -> (right, Some elt)
-      | Node { elt; left; right } ->
-          let left, min = pop_min left in
-          (make_node elt left right, min)
-      )
+    begin match node with
+    | Empty -> (Empty, None)
+    | Leaf lf -> (Empty, Some lf)
+    | Node { elt; left = Empty; right } -> (right, Some elt)
+    | Node { elt; left; right } ->
+        let left, min = pop_min left in
+        (make_node elt left right, min)
+    end
     |> balance_fst
 
   let rec pop_max node =
-    ( match node with
-      | Empty -> (Empty, None)
-      | Leaf lf -> (Empty, Some lf)
-      | Node { elt; left; right = Empty } -> (left, Some elt)
-      | Node { elt; left; right } ->
-          let right, max = pop_max right in
-          (make_node elt left right, max)
-      )
+    begin match node with
+    | Empty -> (Empty, None)
+    | Leaf lf -> (Empty, Some lf)
+    | Node { elt; left; right = Empty } -> (left, Some elt)
+    | Node { elt; left; right } ->
+        let right, max = pop_max right in
+        (make_node elt left right, max)
+    end
     |> balance_fst
 
   let rec remove item ~cmp ?(shift = Pred) node =
-    ( match node with
-      | Empty -> (Empty, None)
-      | Leaf lf as leaf -> (
-          match cmp item lf with
-          | Ordering.Equal -> (Empty, Some lf)
-          | Ordering.Less | Ordering.Greater -> (leaf, None)
-        )
-      | Node { elt; left; right } as node -> (
-          match cmp item elt with
-          | Ordering.Equal -> (
-              match (left, right) with
-              | Empty, Empty -> (Empty, Some elt)
-              | Empty, right ->
-                  let right, min = pop_min right in
-                  (make_node (Option.value_exn min) Empty right, Some elt)
-              | left, Empty ->
-                  let left, max = pop_max left in
-                  (make_node (Option.value_exn max) left Empty, Some elt)
-              | left, right -> (
-                  match shift with
-                  | Succ ->
-                      let right, min = pop_min right in
-                      (make_node (Option.value_exn min) left right, Some elt)
-                  | Pred ->
-                      let left, max = pop_max left in
-                      (make_node (Option.value_exn max) left right, Some elt)
-                )
-            )
-          | Ordering.Less -> (
-              let left, removed = remove ~shift item ~cmp left in
-              match removed with
-              | Some _ -> (make_node elt left right, removed)
-              | None -> (node, None)
-            )
-          | Ordering.Greater -> (
-              let right, removed = remove ~shift item ~cmp right in
-              match removed with
-              | Some _ -> (make_node elt left right, removed)
-              | None -> (node, None)
-            )
-        )
+    begin match node with
+    | Empty -> (Empty, None)
+    | Leaf lf as leaf -> (
+        match cmp item lf with
+        | Ordering.Equal -> (Empty, Some lf)
+        | Ordering.Less | Ordering.Greater -> (leaf, None)
       )
+    | Node { elt; left; right } as node -> (
+        match cmp item elt with
+        | Ordering.Equal -> (
+            match (left, right) with
+            | Empty, Empty -> (Empty, Some elt)
+            | Empty, right ->
+                let right, min = pop_min right in
+                (make_node (Option.value_exn min) Empty right, Some elt)
+            | left, Empty ->
+                let left, max = pop_max left in
+                (make_node (Option.value_exn max) left Empty, Some elt)
+            | left, right -> (
+                match shift with
+                | Succ ->
+                    let right, min = pop_min right in
+                    (make_node (Option.value_exn min) left right, Some elt)
+                | Pred ->
+                    let left, max = pop_max left in
+                    (make_node (Option.value_exn max) left right, Some elt)
+              )
+          )
+        | Ordering.Less -> (
+            let left, removed = remove ~shift item ~cmp left in
+            match removed with
+            | Some _ -> (make_node elt left right, removed)
+            | None -> (node, None)
+          )
+        | Ordering.Greater -> (
+            let right, removed = remove ~shift item ~cmp right in
+            match removed with
+            | Some _ -> (make_node elt left right, removed)
+            | None -> (node, None)
+          )
+      )
+    end
     |> balance_fst
 
   let rec member item ~cmp = function
@@ -675,3 +675,5 @@ module AVL_for_testing = struct
       false
     )
 end
+
+module BTree = struct end

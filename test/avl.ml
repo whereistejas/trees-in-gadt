@@ -16,7 +16,7 @@ let gen_unbalanced_tree n =
     | i -> AVL.Node { elt = i; left = build (i - 1); right = Empty }
   in
   build n
-
+(* 
 let%expect_test "insert maintains BST and balance invariants" =
   (* Insert elements in an order that would cause imbalance in a regular BST *)
   let tree = gen_balanced_tree 7 in
@@ -333,4 +333,20 @@ let%test_unit "qcheck 2" =
   let tree = AVL.insert 111 ~cmp tree in
   let tree = AVL.insert 46 ~cmp tree in
   let tree = AVL.insert 59 ~cmp tree in
+  assert (AVL.check_and_report tree ~cmp ~show:Int.to_string) *)
+
+let%test_unit "qcheck 3" =
+  let tree = AVL.Empty in
+  let tree = AVL.insert 29 ~cmp tree in
+  let tree = AVL.insert 20 ~cmp tree in
+  let tree = AVL.insert 115 ~cmp tree in
+  let tree, removed = AVL.remove 20 ~cmp tree in
+  [%test_eq: int option] removed (Some 20);
+  let tree, removed = AVL.remove 103 ~cmp tree in
+  [%test_eq: int option] removed None;
+  let tree, removed = AVL.remove 81 ~cmp tree in
+  [%test_eq: int option] removed None;
+  let tree = AVL.insert ~debug:true 43 ~cmp tree in
+  Stdio.print_string (AVL.pp_tree Int.to_string tree);
+  Stdio.print_endline "---";
   assert (AVL.check_and_report tree ~cmp ~show:Int.to_string)

@@ -414,7 +414,7 @@ module AVL = struct
     | Same
     | Left of int
     | Right of int
-  [@@deriving sexp, equal]
+  [@@deriving sexp, compare]
 
   let pp_skew skew = Sexp.to_string_hum (sexp_of_skew skew)
 
@@ -481,4 +481,86 @@ module AVL = struct
 
   let remove _item ~cmp:_ _shift _node : 'a node * 'a option = failwith "TODO"
   let member _item ~cmp:_ _node : bool = failwith "TODO"
+end
+
+module AVL_for_testing = struct
+  open Base.Poly
+  include AVL
+
+  let to_list node : 'a list =
+    let rec to_list_aux acc = function
+      | Empty -> acc
+      | Leaf elt -> elt :: acc
+      | Node { elt; left; right } ->
+          to_list_aux (elt :: to_list_aux acc right) left
+    in
+    to_list_aux [] node
+
+  type violation =
+    | Out_of_range of {
+        elt : int;
+        lower : int option;
+        upper : int option;
+      }
+    | Unbalanced of {
+        elt : int;
+        skew : skew;
+      }
+
+  let pp_violation = function
+    | Out_of_range { elt; lower; upper } ->
+        Printf.sprintf "Out_of_range: elt=%d, lower=%s, upper=%s" elt
+          (Option.value_map lower ~default:"None" ~f:Int.to_string)
+          (Option.value_map upper ~default:"None" ~f:Int.to_string)
+    | Unbalanced { elt; skew } ->
+        Printf.sprintf "Unbalanced: elt=%d, skew=%s" elt (pp_skew skew)
+
+  (** Check that all AVL invariants hold:
+      - {b Ordering}: [left] < [elt] < [right]
+      - {b Balance}: |height(left) - height(right)| <= 1 for every node
+      - {b No duplicates}: implied by strict ordering Returns list of violations
+        (empty if valid). *)
+  let find_violations node ~cmp : violation list =
+    let in_range ~lower ~upper elt =
+      Option.for_all lower ~f:(fun lo -> cmp lo elt = Ordering.Less)
+      && Option.for_all upper ~f:(fun hi -> cmp elt hi = Ordering.Less)
+    in
+    let rec loop ~lower ~upper node =
+      match node with
+      | Empty -> []
+      | Leaf elt ->
+          if in_range ~lower ~upper elt then []
+          else [ Out_of_range { elt; lower; upper } ]
+      | Node { elt; left; right } ->
+          let order_violations =
+            if in_range ~lower ~upper elt then []
+            else [ Out_of_range { elt; lower; upper } ]
+          in
+          let balance_violations =
+            match skew node with
+            | Same -> []
+            | s -> [ Unbalanced { elt; skew = s } ]
+          in
+          order_violations
+          @ balance_violations
+          @ loop ~lower ~upper:(Some elt) left
+          @ loop ~lower:(Some elt) ~upper right
+    in
+    loop ~lower:None ~upper:None node
+
+  let check_invariants node ~cmp : bool =
+    List.is_empty (find_violations node ~cmp)
+
+  (** Check invariants and print tree + violations if any found. *)
+  let check_and_report node ~cmp ~show : bool =
+    let violations = find_violations node ~cmp in
+    if List.is_empty violations then true
+    else (
+      Stdio.print_endline "AVL invariant violations found:";
+      Stdio.print_endline (pp_tree show node);
+      List.iter violations ~f:(fun v ->
+          Stdio.print_endline ("  - " ^ pp_violation v)
+      );
+      false
+    )
 end

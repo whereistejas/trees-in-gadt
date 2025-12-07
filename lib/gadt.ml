@@ -302,8 +302,12 @@ module AVL = struct
       [height = max (height left) (height right) + 1]
 
       {2 Invariants}
-      - We maintain the BST invariant, where [left < root < right].
-      - We maintain the skew for each node is either [-1, 0 , 1]
+      + {b Ordering}: For any [Node { elt; left; right }], all values in [left]
+        < [elt] < all values in [right]
+      + {b Balance}: For any [Node { elt; left; right }], the skew is either
+        [-1, 0 , 1].
+      + {b Leaf normalization}: [Node { elt; left = Empty; right = Empty }] is
+        invalid; use [Leaf elt] instead. Enforced by [make_node].
 
       `Base` has its own `Avltreee` implementation that we can use for fuzz
       testing. *)
@@ -447,7 +451,6 @@ module AVL = struct
     | Empty | Leaf _ -> assert false
 
   and balance node =
-    (* printf "Balancing node:\n%s" (pp_tree Int.to_string node); *)
     match node with
     | Empty -> Empty
     | Leaf _ -> node
@@ -463,8 +466,7 @@ module AVL = struct
     ( match node with
       | Empty -> Leaf item
       | Leaf lf -> (
-          (* FIXME: The allocation in `Leaf lf` is wasteful, just return the
-             existing leaf. *)
+          (* FIXME: The allocation in `Leaf lf` is wasteful, just return the existing leaf. *)
           match cmp item lf with
           | Ordering.Equal -> Leaf lf
           | Ordering.Less -> Node { elt = lf; left = Leaf item; right = Empty }
@@ -481,7 +483,83 @@ module AVL = struct
       )
     |> balance
 
-  let remove _item ~cmp:_ _shift _node : 'a node * 'a option = failwith "TODO"
+  let rec pop_min = function
+    | Empty -> (Empty, None)
+    | Leaf lf -> (Empty, Some lf)
+    | Node { elt; left = Empty; right } ->
+        (* INVARIANTS: The BST invariant guarantees that the minimum value is in
+           the left subtree. In fact, the minimum value is the leftmost value in
+           the tree which means it won't have a left subtree. *)
+        (right, Some elt)
+    | Node { elt; left; right } ->
+        let left, min = pop_min left in
+        (make_node elt left right, min)
+
+  let rec pop_max = function
+    | Empty -> (Empty, None)
+    | Leaf lf -> (Empty, Some lf)
+    | Node { elt; left; right = Empty } ->
+        (* INVARIANTS: The BST invariant guarantees that the maximum value is in
+           the right subtree. In fact, the maximum value is the rightmost value
+           in the tree which means it won't have a right subtree. *)
+        (left, Some elt)
+    | Node { elt; left; right } ->
+        let right, max = pop_max right in
+        (make_node elt left right, max)
+
+  let rec remove item ~cmp ?(shift = Pred) node =
+    let node, removed =
+      match node with
+      | Empty -> (Empty, None)
+      | Leaf lf as leaf -> (
+          match cmp item lf with
+          | Ordering.Equal -> (Empty, Some lf)
+          | Ordering.Less | Ordering.Greater -> (leaf, None)
+        )
+      | Node { elt; left; right } as node -> (
+          match cmp item elt with
+          | Ordering.Equal -> (
+              (* Check subtree availability first, then apply shift preference *)
+              match (left, right) with
+              | Empty, Empty ->
+                  (* WARNING: shouldn't happen (would be Leaf), but handle
+                   safely *)
+                  (Empty, Some elt)
+              | Empty, right ->
+                  (* Only right subtree exists - use successor *)
+                  let right, min = pop_min right in
+                  (make_node (Option.value_exn min) Empty right, Some elt)
+              | left, Empty ->
+                  (* Only left subtree exists - use predecessor *)
+                  let left, max = pop_max left in
+                  (make_node (Option.value_exn max) left Empty, Some elt)
+              | left, right -> (
+                  (* Both subtrees exist - use shift preference *)
+                  match shift with
+                  | Succ ->
+                      let right, min = pop_min right in
+                      (make_node (Option.value_exn min) left right, Some elt)
+                  | Pred ->
+                      let left, max = pop_max left in
+                      (make_node (Option.value_exn max) left right, Some elt)
+                )
+            )
+          | Ordering.Less -> (
+              let left, removed = remove ~shift item ~cmp left in
+              match removed with
+              | Some _ -> (make_node elt left right, removed)
+              | None -> (node, None)
+            )
+          | Ordering.Greater -> (
+              let right, removed = remove ~shift item ~cmp right in
+              match removed with
+              | Some _ -> (make_node elt left right, removed)
+              | None -> (node, None)
+            )
+        )
+    in
+    (balance node, removed)
+
   let member _item ~cmp:_ _node : bool = failwith "TODO"
 end
 
@@ -508,6 +586,7 @@ module AVL_for_testing = struct
         elt : int;
         skew : skew;
       }
+    | Not_normalized of { elt : int }
 
   let pp_violation = function
     | Out_of_range { elt; lower; upper } ->
@@ -516,12 +595,16 @@ module AVL_for_testing = struct
           (Option.value_map upper ~default:"None" ~f:Int.to_string)
     | Unbalanced { elt; skew } ->
         Printf.sprintf "Unbalanced: elt=%d, skew=%s" elt (pp_skew skew)
+    | Not_normalized { elt } ->
+        Printf.sprintf "Not_normalized: elt=%d (Node with both children Empty)"
+          elt
 
   (** Check that all AVL invariants hold:
       - {b Ordering}: [left] < [elt] < [right]
       - {b Balance}: |height(left) - height(right)| <= 1 for every node
-      - {b No duplicates}: implied by strict ordering Returns list of violations
-        (empty if valid). *)
+      - {b No duplicates}: implied by strict ordering
+      - {b Leaf normalization}: no [Node] with both children [Empty] Returns
+        list of violations (empty if valid). *)
   let find_violations node ~cmp : violation list =
     let in_range ~lower ~upper elt =
       Option.for_all lower ~f:(fun lo -> cmp lo elt = Ordering.Less)
@@ -543,8 +626,13 @@ module AVL_for_testing = struct
             | Same -> []
             | s -> [ Unbalanced { elt; skew = s } ]
           in
+          let normalization_violations =
+            if left = Empty && right = Empty then [ Not_normalized { elt } ]
+            else []
+          in
           order_violations
           @ balance_violations
+          @ normalization_violations
           @ loop ~lower ~upper:(Some elt) left
           @ loop ~lower:(Some elt) ~upper right
     in

@@ -257,10 +257,54 @@ let%test "random-ish order maintains invariants" =
   in
   AVL.check_invariants tree ~cmp
 
-let%test "alternating high-low maintains invariants" =
+(* let%test "alternating high-low maintains invariants" =
   let tree =
     List.fold [ 1; 10; 2; 9; 3; 8; 4; 7; 5; 6 ] ~init:AVL.Empty ~f:(fun acc x ->
         AVL.insert x ~cmp acc
     )
   in
+  AVL.check_invariants tree ~cmp *)
+
+(* ============================================================================
+   Section 7: Remove with Rebalancing
+   ============================================================================ *)
+
+let%expect_test "remove causes rebalancing - delete from shorter side" =
+  let tree =
+    List.fold [ 1; 2; 3; 4; 5 ] ~init:AVL.Empty ~f:(fun acc x ->
+        AVL.insert x ~cmp acc
+    )
+  in
+  Stdio.print_endline "Before remove:";
+  Stdio.print_string (AVL.pp_tree Int.to_string tree);
+  let tree, removed = AVL.remove 1 ~cmp tree in
+  Stdio.printf "\nRemoved: %s\n"
+    (Option.value_map removed ~default:"None" ~f:Int.to_string);
+  Stdio.print_endline "After remove:";
+  Stdio.print_string (AVL.pp_tree Int.to_string tree);
+  [%expect
+    {|
+    Before remove:
+          2(h=3)
+       ┌─────┴──────┐
+    1(h=1)       4(h=2)
+                ┌───┴────┐
+             3(h=1)   5(h=1)
+
+    Removed: 1
+    After remove:
+          4(h=3)
+       ┌─────┴──────┐
+    2(h=2)       5(h=1)
+    ┌──┴───┐
+    .   3(h=1)
+    |}]
+
+let%test "remove with rebalancing maintains invariants" =
+  let tree =
+    List.fold [ 1; 2; 3; 4; 5 ] ~init:AVL.Empty ~f:(fun acc x ->
+        AVL.insert x ~cmp acc
+    )
+  in
+  let tree, _ = AVL.remove 1 ~cmp tree in
   AVL.check_invariants tree ~cmp

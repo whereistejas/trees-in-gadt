@@ -170,7 +170,7 @@ module BST = struct
     | _, _ -> Node { elt; left; right }
 
   let rec pop_min = function
-    | Empty -> (Empty, None)
+    | Empty -> (Empty, failwith "noop")
     | Leaf lf -> (Empty, Some lf)
     | Node { elt; left = Empty; right } ->
         (* INVARIANTS: The BST invariant guarantees that the minimum value is in
@@ -416,7 +416,7 @@ module AVL = struct
     | Pred
 
   type leaning =
-    | Same
+    | Eq
     | Left
     | Right
   [@@deriving sexp, compare]
@@ -431,7 +431,7 @@ module AVL = struct
   (** Returns true if the node leans left (left subtree is taller). Used to
       detect zigzag cases for double rotations. *)
   let leaning node =
-    if skew node < 0 then Left else if skew node > 0 then Right else Same
+    if skew node < 0 then Left else if skew node > 0 then Right else Eq
 
   let make_node elt left right =
     if left = Empty && right = Empty then Leaf elt
@@ -456,7 +456,7 @@ module AVL = struct
         | Leaf l_elt -> make_node l_elt Empty (make_node elt Empty right)
         | Empty -> assert false
       )
-    | Same -> assert false
+    | Eq -> assert false
 
   let balance node =
     match node with
@@ -676,4 +676,149 @@ module AVL_for_testing = struct
     )
 end
 
-module BTree = struct end
+module AVL_Gadt = struct
+  open Base.Poly
+
+  (* These are inhabitated types. The OCaml compiler can look at the type signature
+  and differentiate between zero and zero succ. *)
+  type zero = Zero
+  type 'n succ = Succ of 'n
+  type one = zero succ
+  type empty = Empty  (** Empty type for [node]. *)
+
+  (* The first type parameter is for the element type and the second type parameter is for the height. *)
+  type ('a, 'h) node =
+    | Empty : ('a, zero) node
+    | Leaf : 'a -> ('a, one) node
+    | Eq : {
+        elt : 'a;
+        left : ('a, 'h) node;
+        right : ('a, 'h) node;
+      }
+        -> ('a, 'h succ) node
+    | Left : {
+        elt : 'a;
+        left : ('a, 'h succ) node;
+        right : ('a, 'h) node;
+      }
+        -> ('a, 'h succ succ) node
+    | Right : {
+        elt : 'a;
+        left : ('a, 'h) node;
+        right : ('a, 'h succ) node;
+      }
+        -> ('a, 'h succ succ) node
+
+  type 'a t = T : ('a, _) node -> 'a t
+
+  let empty = T Empty
+
+  let rec member : type a h.
+      a -> cmp:(a -> a -> Ordering.t) -> (a, h) node -> bool =
+   fun item ~cmp node ->
+    match node with
+    | Empty -> false
+    | Leaf lf -> cmp item lf = Ordering.Equal
+    | Eq { left; elt; right } -> (
+        match cmp item elt with
+        | Ordering.Equal -> true
+        | Ordering.Less -> member item ~cmp left
+        | Ordering.Greater -> member item ~cmp right
+      )
+    | Left { left; elt; right } -> (
+        match cmp item elt with
+        | Ordering.Equal -> true
+        | Ordering.Less -> member item ~cmp left
+        | Ordering.Greater -> member item ~cmp right
+      )
+    | Right { left; elt; right } -> (
+        match cmp item elt with
+        | Ordering.Equal -> true
+        | Ordering.Less -> member item ~cmp left
+        | Ordering.Greater -> member item ~cmp right
+      )
+
+  let member item ~cmp (T node) = member item ~cmp node
+
+  type ('a, 'h) insert =
+    | Same : ('a, 'h) node -> ('a, 'h) insert
+    | Grew : ('a, 'h succ) node -> ('a, 'h) insert
+
+  let rec insert : type a h.
+      a -> cmp:(a -> a -> Ordering.t) -> (a, h) node -> (a, h) insert =
+   fun item ~cmp node ->
+    match node with
+    | Empty -> Grew (Leaf item)
+    | Leaf lf -> (
+        match cmp item lf with
+        | Ordering.Less ->
+            Grew (Left { elt = lf; left = Leaf item; right = Empty })
+        | Ordering.Greater ->
+            Grew (Right { elt = lf; left = Empty; right = Leaf item })
+        | Ordering.Equal -> failwith "noop"
+      )
+    | Eq { left; elt; right } -> (
+        match cmp item elt with
+        | Ordering.Equal -> failwith "noop"
+        | Ordering.Less -> (
+            let new_left = insert item ~cmp left in
+            match new_left with
+            | Same left -> Same (Eq { elt; left; right })
+            | Grew left -> Grew (Left { elt; left; right })
+          )
+        | Ordering.Greater -> (
+            let new_right = insert item ~cmp right in
+            match new_right with
+            | Same right -> Same (Eq { elt; left; right })
+            | Grew right -> Grew (Right { elt; left; right })
+          )
+      )
+    | Left { left; elt; right } -> (
+        (* We may need to rebalance the resulting tree after inserting the item. *)
+        (* However, in order to track which subtree has grown, we need to compare the heights of the subtrees. *)
+        (* Since we don't have access to the height, we nned to encode this information in the type system. *)
+        (* Ideally, the return type of this method should do that, that's how the `insert` type came to be about. *)
+        match cmp item elt with
+        | Ordering.Equal -> failwith "noop"
+        | Ordering.Less -> (
+            let new_left = insert item ~cmp left in
+            match new_left with
+            | Same left -> Same (Left { elt; left; right })
+            | Grew left ->
+                (* We need to rebalance the left tree after inserting the item *)
+                (* The new tree can be either `Eq` or `Left`, which means it can also be either `Same` or `Grew`. *)
+                Grew (Left { elt; left; right })
+          )
+        | Ordering.Greater -> (
+            let new_right = insert item ~cmp right in
+            match new_right with
+            | Same right -> Same (Left { elt; left; right })
+            | Grew right ->
+                (* TODO: Rebalancing *)
+                Grew (Left { elt; left; right })
+          )
+      )
+    | Right { left; elt; right } -> (
+        match cmp item elt with
+        | Ordering.Equal -> failwith "noop"
+        | Ordering.Less -> (
+            let new_left = insert item ~cmp left in
+            match new_left with
+            | Same left -> Same (Right { elt; left; right })
+            | Grew left ->
+                (* TODO: Rebalancing *)
+                Grew (Left { elt; left; right })
+          )
+        | Ordering.Greater -> (
+            let new_right = insert item ~cmp right in
+            match new_right with
+            | Same right -> Same (Right { elt; left; right })
+            | Grew right ->
+                (* TODO: Rebalancing *)
+                Grew (Right { elt; left; right })
+          )
+      )
+
+  let insert item ~cmp (T node) =
+    match insert item ~cmp node with Same node -> T node | Grew node -> T node
+end

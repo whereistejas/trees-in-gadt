@@ -456,91 +456,52 @@ module AVL = struct
       )
     | Same -> assert false
 
-  let balance ?(debug = false) ?(indent = "") node =
-    if debug then
-      Stdio.printf "%s   balance skew=%d:\n%s\n" indent (skew node)
-        (pp_tree ~indent Int.to_string node);
-    let result =
-      match node with
-      | Empty | Leaf _ -> node
-      | Node { elt; left; right } ->
-          let s = skew node in
-          if s < -1 then
-            (* Left-heavy: maybe double rotate if left child leans right *)
-            let left =
-              if leaning left = Right then (
-                if debug then
-                  Stdio.printf "%s   double rotate (left child leans right)\n"
-                    indent;
-                match left with
-                | Node { elt; left; right } -> rotate Left elt left right
-                | Empty | Leaf _ -> assert false
-              )
-              else left
-            in
-            rotate Right elt left right
-          else if s > 1 then
-            (* Right-heavy: maybe double rotate if right child leans left *)
-            let right =
-              if leaning right = Left then (
-                if debug then
-                  Stdio.printf "%s   double rotate (right child leans left)\n"
-                    indent;
-                match right with
-                | Node { elt; left; right } -> rotate Right elt left right
-                | Empty | Leaf _ -> assert false
-              )
-              else right
-            in
-            rotate Left elt left right
-          else node
-    in
-    if debug then
-      Stdio.printf "%s   balanced:\n%s\n" indent
-        (pp_tree ~indent Int.to_string result);
-    result
+  let balance node =
+    match node with
+    | Empty | Leaf _ -> node
+    | Node { elt; left; right } ->
+        let s = skew node in
+        if s < -1 then
+          (* Left-heavy: maybe double rotate if left child leans right *)
+          let left =
+            if leaning left = Right then
+              match left with
+              | Node { elt; left; right } -> rotate Left elt left right
+              | Empty | Leaf _ -> assert false
+            else left
+          in
+          rotate Right elt left right
+        else if s > 1 then
+          (* Right-heavy: maybe double rotate if right child leans left *)
+          let right =
+            if leaning right = Left then
+              match right with
+              | Node { elt; left; right } -> rotate Right elt left right
+              | Empty | Leaf _ -> assert false
+            else right
+          in
+          rotate Left elt left right
+        else node
 
-  let rec insert ?(debug = false) ?(indent = "") item ~cmp node =
-    let pad = indent ^ "         " in
-    if debug then
-      Stdio.printf "%s-> insert %d into:\n%s\n" indent item
-        (pp_tree ~indent Int.to_string node);
-    let result =
-      ( match node with
-        | Empty -> Leaf item
-        | Leaf lf -> (
-            match cmp item lf with
-            | Ordering.Equal -> Leaf lf
-            | Ordering.Less ->
-                Node { elt = lf; left = Leaf item; right = Empty }
-            | Ordering.Greater ->
-                Node { elt = item; left = Leaf lf; right = Empty }
-          )
-        | Node { elt; left; right } -> (
-            match cmp item elt with
-            | Ordering.Equal -> node
-            | Ordering.Less ->
-                Node
-                  {
-                    elt;
-                    left = insert ~debug ~indent:pad item ~cmp left;
-                    right;
-                  }
-            | Ordering.Greater ->
-                Node
-                  {
-                    elt;
-                    left;
-                    right = insert ~debug ~indent:pad item ~cmp right;
-                  }
-          )
+  let rec insert item ~cmp node =
+    ( match node with
+      | Empty -> Leaf item
+      | Leaf lf -> (
+          match cmp item lf with
+          | Ordering.Equal -> Leaf lf
+          | Ordering.Less -> Node { elt = lf; left = Leaf item; right = Empty }
+          | Ordering.Greater ->
+              Node { elt = item; left = Leaf lf; right = Empty }
         )
-      |> balance ~debug ~indent
-    in
-    if debug then
-      Stdio.printf "%s<- result:\n%s\n" indent
-        (pp_tree ~indent Int.to_string result);
-    result
+      | Node { elt; left; right } -> (
+          match cmp item elt with
+          | Ordering.Equal -> node
+          | Ordering.Less -> Node { elt; left = insert item ~cmp left; right }
+          | Ordering.Greater ->
+              Node { elt; left; right = insert item ~cmp right }
+        )
+      )
+    |> balance
 
   (** Balance the tree in a (tree, value) tuple *)
   let balance_fst (tree, value) = (balance tree, value)

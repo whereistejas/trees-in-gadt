@@ -9,9 +9,29 @@
 ; AFL-native fuzz test (requires AFL-enabled OCaml switch)
 
 (executable
- (name fuzz_afl)
- (modules fuzz_afl)
+ (name fuzz_bst)
+ (modules fuzz_bst)
  (libraries gadt base afl-persistent)
  (optional)
  (ocamlopt_flags
   (:standard -afl-instrument)))
+
+(executable
+ (name fuzz_avl)
+ (modules fuzz_avl)
+ (libraries gadt base afl-persistent)
+ (optional)
+ (ocamlopt_flags
+  (:standard -afl-instrument)))
+
+(executable
+ (name debug_crash)
+ (modules debug_crash)
+ (libraries gadt base stdio))
+
+; QCheck property-based tests (proptest-like experience)
+
+(test
+ (name test_avl_qcheck)
+ (modules test_avl_qcheck)
+ (libraries gadt base qcheck qcheck-core))

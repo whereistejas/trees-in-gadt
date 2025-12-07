@@ -13,6 +13,8 @@ depends: [
   "ppx_inline_test" {with-test & >= "0.16.1"}
   "ppx_assert" {with-test & >= "0.16.0"}
   "ppx_expect" {with-test & >= "0.16.0"}
+  "qcheck" {with-test & >= "0.21"}
+  "qcheck-core" {with-test & >= "0.21"}
   "odoc" {with-doc}
 ]
 depopts: ["afl-persistent"]

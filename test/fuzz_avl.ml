@@ -1,5 +1,5 @@
 open Base
-module BST = Gadt.BST_for_testing
+module AVL = Gadt.AVL_for_testing
 
 let cmp a b : Ordering.t = Ordering.of_int (compare a b)
 
@@ -13,10 +13,10 @@ let cmp a b : Ordering.t = Ordering.of_int (compare a b)
       opam install afl-persistent base
 
       # Build and run
-      dune build test/fuzz_afl.exe
+      dune build test/fuzz_avl.exe
       mkdir -p _fuzz/input _fuzz/output
       echo -e "\x05\x01\x03\x02\x04" > _fuzz/input/seed
-      afl-fuzz -i _fuzz/input -o _fuzz/output ./_build/default/test/fuzz_afl.exe
+      afl-fuzz -i _fuzz/input -o _fuzz/output ./_build/default/test/fuzz_avl.exe
     ]} *)
 
 (** Parse bytes from stdin into operations. Format: each byte is an operation
@@ -35,25 +35,40 @@ let parse_ops () : [ `Insert of int | `Remove of int ] list =
   in
   read_all []
 
+(** Convert Base.Avltree to sorted list *)
+let avltree_to_list (ref_tree : (int, unit) Avltree.t) : int list =
+  let acc = ref [] in
+  Avltree.iter ref_tree ~f:(fun ~key ~data:_ -> acc := key :: !acc);
+  List.rev !acc
+
 (** Apply operations and check invariants *)
 let run_test () =
   let ops = parse_ops () in
   let tree, reference =
     List.fold ops
-      ~init:(BST.Empty, Set.empty (module Int))
-      ~f:(fun (tree, set) op ->
+      ~init:(AVL.Empty, (Avltree.empty : (int, unit) Avltree.t))
+      ~f:(fun (tree, ref_tree) op ->
         match op with
-        | `Insert x -> (BST.insert x ~cmp tree, Set.add set x)
+        | `Insert x ->
+            let ref_tree' =
+              Avltree.add ref_tree ~replace:false ~compare:Int.compare
+                ~added:(ref false) ~key:x ~data:()
+            in
+            (AVL.insert x ~cmp tree, ref_tree')
         | `Remove x ->
-            let tree', _ = BST.remove x ~cmp tree in
-            (tree', Set.remove set x)
+            let tree', _ = AVL.remove x ~cmp tree in
+            let ref_tree' =
+              Avltree.remove ref_tree ~removed:(ref false) ~compare:Int.compare
+                x
+            in
+            (tree', ref_tree')
       )
   in
   (* Check invariants *)
-  if not (BST.check_invariants tree ~cmp) then failwith "Invariant violation!";
+  if not (AVL.check_invariants tree ~cmp) then failwith "Invariant violation!";
   (* Check contents match *)
-  let tree_list = BST.to_list tree in
-  let ref_list = Set.to_list reference in
+  let tree_list = AVL.to_list tree in
+  let ref_list = avltree_to_list reference in
   if not (List.equal Int.equal tree_list ref_list) then
     failwith "Contents mismatch!";
   (* Check sorted *)

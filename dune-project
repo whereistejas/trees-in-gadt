@@ -35,7 +35,15 @@
   (ppx_expect
    (and
     :with-test
-    (>= 0.16.0))))
+    (>= 0.16.0)))
+  (qcheck
+   (and
+    :with-test
+    (>= 0.21)))
+  (qcheck-core
+   (and
+    :with-test
+    (>= 0.21))))
  (depopts afl-persistent))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html

@@ -740,22 +740,35 @@ module AVL_Gadt = struct
 
   let member item ~cmp (T node) = member item ~cmp node
 
+  (* The return type here represents the `input` to the `insert` method. *)
   type ('a, 'h) insert =
     | Same : ('a, 'h) node -> ('a, 'h) insert
-    | Grew : ('a, 'h succ) node -> ('a, 'h) insert
+    | GrowLeaf : 'a -> ('a, zero) insert
+    | GrowLeft : {
+        elt : 'a;
+        left : ('a, 'h succ) node;
+        right : ('a, 'h) node;
+      }
+        -> ('a, 'h succ) insert
+    | GrowRight : {
+        elt : 'a;
+        left : ('a, 'h) node;
+        right : ('a, 'h succ) node;
+      }
+        -> ('a, 'h succ) insert
 
   let rec insert : type a h.
       a -> cmp:(a -> a -> Ordering.t) -> (a, h) node -> (a, h) insert =
    fun item ~cmp node ->
     match node with
-    | Empty -> Grew (Leaf item)
+    | Empty -> GrowLeaf item
     | Leaf lf -> (
         match cmp item lf with
-        | Ordering.Less ->
-            Grew (Left { elt = lf; left = Leaf item; right = Empty })
-        | Ordering.Greater ->
-            Grew (Right { elt = lf; left = Empty; right = Leaf item })
         | Ordering.Equal -> failwith "noop"
+        | Ordering.Less ->
+            GrowLeft { elt = lf; left = Leaf item; right = Empty }
+        | Ordering.Greater ->
+            GrowRight { elt = lf; left = Empty; right = Leaf item }
       )
     | Eq { left; elt; right } -> (
         match cmp item elt with
@@ -763,14 +776,44 @@ module AVL_Gadt = struct
         | Ordering.Less -> (
             let new_left = insert item ~cmp left in
             match new_left with
-            | Same left -> Same (Eq { elt; left; right })
-            | Grew left -> Grew (Left { elt; left; right })
+            | Same new_left -> Same (Eq { elt; left = new_left; right })
+            | GrowLeaf leaf -> GrowLeft { elt; left = Leaf leaf; right }
+            | GrowLeft { left = l_left; elt = l_elt; right = l_right } ->
+                GrowLeft
+                  {
+                    elt;
+                    left = Left { elt = l_elt; left = l_left; right = l_right };
+                    right;
+                  }
+            | GrowRight { left = r_left; elt = r_elt; right = r_right } ->
+                GrowLeft
+                  {
+                    elt;
+                    left = Right { elt = r_elt; left = r_left; right = r_right };
+                    right;
+                  }
           )
         | Ordering.Greater -> (
             let new_right = insert item ~cmp right in
             match new_right with
-            | Same right -> Same (Eq { elt; left; right })
-            | Grew right -> Grew (Right { elt; left; right })
+            | Same new_right -> Same (Eq { elt; left; right = new_right })
+            | GrowLeaf leaf ->
+                GrowRight { elt; left = Empty; right = Leaf leaf }
+            | GrowLeft { left = r_left; elt = r_elt; right = r_right } ->
+                GrowRight
+                  {
+                    elt;
+                    left;
+                    right = Left { elt = r_elt; left = r_left; right = r_right };
+                  }
+            | GrowRight { left = r_left; elt = r_elt; right = r_right } ->
+                GrowRight
+                  {
+                    elt;
+                    left;
+                    right =
+                      Right { elt = r_elt; left = r_left; right = r_right };
+                  }
           )
       )
     | Left { left; elt; right } -> (
@@ -782,20 +825,89 @@ module AVL_Gadt = struct
         | Ordering.Equal -> failwith "noop"
         | Ordering.Less -> (
             let new_left = insert item ~cmp left in
+            (* How do we know whic subtree in `left` has grown? *)
+            (* Again we could compare them, but we can't. So we need to add more variants to our `insert` type. *)
+            (* We need a LL rotation to rebalance the tree here. *)
             match new_left with
-            | Same left -> Same (Left { elt; left; right })
-            | Grew left ->
-                (* We need to rebalance the left tree after inserting the item *)
-                (* The new tree can be either `Eq` or `Left`, which means it can also be either `Same` or `Grew`. *)
-                Grew (Left { elt; left; right })
+            | Same new_left -> Same (Left { elt; left = new_left; right })
+            | GrowLeft { left = l_left; elt = l_elt; right = l_right } ->
+                (* LL case: Right rotation *)
+                Same
+                  (Eq
+                     {
+                       elt = l_elt;
+                       left = l_left;
+                       right = Eq { elt; left = l_right; right };
+                     }
+                  )
+            | GrowRight { left = r_left; elt = r_elt; right = r_right } -> (
+                (* LR case: Left-Right double rotation *)
+                (* The pivot (root of r_right) becomes the new root *)
+                match r_right with
+                | Leaf pivot ->
+                    (* r_left and right are both Empty at this height *)
+                    Same
+                      (Eq { elt = pivot; left = Leaf r_elt; right = Leaf elt })
+                | Eq { elt = pivot; left = pl; right = pr } ->
+                    (* Both pl and pr have equal height *)
+                    Same
+                      (Eq
+                         {
+                           elt = pivot;
+                           left = Eq { elt = r_elt; left = r_left; right = pl };
+                           right = Eq { elt; left = pr; right };
+                         }
+                      )
+                | Left { elt = pivot; left = pl; right = pr } ->
+                    (* pl is taller than pr *)
+                    Same
+                      (Eq
+                         {
+                           elt = pivot;
+                           left = Eq { elt = r_elt; left = r_left; right = pl };
+                           right = Right { elt; left = pr; right };
+                         }
+                      )
+                | Right { elt = pivot; left = pl; right = pr } ->
+                    (* pr is taller than pl *)
+                    Same
+                      (Eq
+                         {
+                           elt = pivot;
+                           left =
+                             Left { elt = r_elt; left = r_left; right = pl };
+                           right = Eq { elt; left = pr; right };
+                         }
+                      )
+              )
           )
         | Ordering.Greater -> (
             let new_right = insert item ~cmp right in
             match new_right with
-            | Same right -> Same (Left { elt; left; right })
-            | Grew right ->
-                (* TODO: Rebalancing *)
-                Grew (Left { elt; left; right })
+            | Same new_right -> Same (Left { elt; left; right = new_right })
+            | GrowLeaf leaf -> Same (Eq { elt; left; right = Leaf leaf })
+            | GrowLeft { left = l_left; elt = l_elt; right = l_right } ->
+                (* Right subtree grew on its left — tree is now balanced *)
+                Same
+                  (Eq
+                     {
+                       elt;
+                       left;
+                       right =
+                         Left { elt = l_elt; left = l_left; right = l_right };
+                     }
+                  )
+            | GrowRight { left = r_left; elt = r_elt; right = r_right } ->
+                (* Right subtree grew on its right — tree is now balanced *)
+                Same
+                  (Eq
+                     {
+                       elt;
+                       left;
+                       right =
+                         Right { elt = r_elt; left = r_left; right = r_right };
+                     }
+                  )
           )
       )
     | Right { left; elt; right } -> (
@@ -804,21 +916,18 @@ module AVL_Gadt = struct
         | Ordering.Less -> (
             let new_left = insert item ~cmp left in
             match new_left with
-            | Same left -> Same (Right { elt; left; right })
-            | Grew left ->
-                (* TODO: Rebalancing *)
-                Grew (Left { elt; left; right })
+            | GrowLeaf _ -> failwith "TODO"
+            | Same _ -> failwith "TODO"
+            | GrowLeft _ -> failwith "TODO"
+            | GrowRight _ -> failwith "TODO"
           )
         | Ordering.Greater -> (
             let new_right = insert item ~cmp right in
+            (* TODO: Try adding `GrowLeaf` variant here. The compiler won't let you. *)
             match new_right with
-            | Same right -> Same (Right { elt; left; right })
-            | Grew right ->
-                (* TODO: Rebalancing *)
-                Grew (Right { elt; left; right })
+            | Same _ -> failwith "TODO"
+            | GrowLeft _ -> failwith "TODO"
+            | GrowRight _ -> failwith "TODO"
           )
       )
-
-  let insert item ~cmp (T node) =
-    match insert item ~cmp node with Same node -> T node | Grew node -> T node
 end

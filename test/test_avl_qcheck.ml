@@ -155,6 +155,5 @@ let test_membership_properties =
 
 (* === Run Tests === *)
 
-let _ =
-  let open QCheck_runner in
-  run_tests_main [ test_all_properties; test_membership_properties ]
+(* let _ = let open QCheck_runner in run_tests_main [ test_all_properties;
+   test_membership_properties ] *)

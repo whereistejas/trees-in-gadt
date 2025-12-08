@@ -242,7 +242,7 @@ let%expect_test "insert [1; 2; 3] - triggers rotation, check structure" =
        ┌───┴────┐
     1(h=1)   3(h=1)
 
-    Leaning: Same
+    Leaning: Eq
     |}]
 
 (* ============================================================================
@@ -257,13 +257,13 @@ let%test "random-ish order maintains invariants" =
   in
   AVL.check_invariants tree ~cmp
 
-(* let%test "alternating high-low maintains invariants" =
+let%test "alternating high-low maintains invariants" =
   let tree =
     List.fold [ 1; 10; 2; 9; 3; 8; 4; 7; 5; 6 ] ~init:AVL.Empty ~f:(fun acc x ->
         AVL.insert x ~cmp acc
     )
   in
-  AVL.check_invariants tree ~cmp *)
+  AVL.check_invariants tree ~cmp
 
 (* ============================================================================
    Section 7: Remove with Rebalancing

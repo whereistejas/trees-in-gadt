@@ -679,14 +679,15 @@ end
 module AVL_Gadt = struct
   open Base.Poly
 
-  (* These are inhabitated types. The OCaml compiler can look at the type signature
-  and differentiate between zero and zero succ. *)
+  (* These are inhabitated types. The OCaml compiler can look at the type
+     signature and differentiate between zero and zero succ. *)
   type zero = Zero
   type 'n succ = Succ of 'n
   type one = zero succ
   type empty = Empty  (** Empty type for [node]. *)
 
-  (* The first type parameter is for the element type and the second type parameter is for the height. *)
+  (* The first type parameter is for the element type and the second type
+     parameter is for the height. *)
   type ('a, 'h) node =
     | Empty : ('a, zero) node
     | Leaf : 'a -> ('a, one) node
@@ -887,7 +888,6 @@ module AVL_Gadt = struct
             | Same new_right -> Same (Left { elt; left; right = new_right })
             | GrowLeaf leaf -> Same (Eq { elt; left; right = Leaf leaf })
             | GrowLeft { left = l_left; elt = l_elt; right = l_right } ->
-                (* Right subtree grew on its left — tree is now balanced *)
                 Same
                   (Eq
                      {
@@ -898,7 +898,6 @@ module AVL_Gadt = struct
                      }
                   )
             | GrowRight { left = r_left; elt = r_elt; right = r_right } ->
-                (* Right subtree grew on its right — tree is now balanced *)
                 Same
                   (Eq
                      {
@@ -916,18 +915,53 @@ module AVL_Gadt = struct
         | Ordering.Less -> (
             let new_left = insert item ~cmp left in
             match new_left with
-            | GrowLeaf _ -> failwith "TODO"
-            | Same _ -> failwith "TODO"
-            | GrowLeft _ -> failwith "TODO"
-            | GrowRight _ -> failwith "TODO"
+            | Same new_left -> Same (Right { elt; left = new_left; right })
+            | GrowLeaf leaf -> Same (Eq { elt; left = Leaf leaf; right })
+            | GrowLeft { left = r_left; elt = r_elt; right = r_right } ->
+                Same
+                  (Eq
+                     {
+                       elt;
+                       left =
+                         Left { elt = r_elt; left = r_left; right = r_right };
+                       right;
+                     }
+                  )
+            | GrowRight { left = r_left; elt = r_elt; right = r_right } ->
+                Same
+                  (Right
+                     {
+                       elt;
+                       left;
+                       right =
+                         Right { elt = r_elt; left = r_left; right = r_right };
+                     }
+                  )
           )
         | Ordering.Greater -> (
             let new_right = insert item ~cmp right in
-            (* TODO: Try adding `GrowLeaf` variant here. The compiler won't let you. *)
+            (* TODO: Try adding `GrowLeaf` variant here. The compiler won't let
+               you. *)
             match new_right with
-            | Same _ -> failwith "TODO"
+            | Same new_right -> Same (Right { elt; left; right = new_right })
             | GrowLeft _ -> failwith "TODO"
-            | GrowRight _ -> failwith "TODO"
+            | GrowRight { left = r_left; elt = r_elt; right = r_right } ->
+                (* The key insight: in a left rotation, the original node (`elt`) 
+                drops down to become the left child, taking:
+                - Its original `left` child (stays as left)
+                - The pivot's `left` child (`r_left`) as its new right
+                Both `left` and `r_left` have height H, so they form a valid `Eq` node. 
+                The original `right` is gone — it was destructured into `r_elt`, `r_left`, and `r_right`. 
+                *)
+                (* RR case: Left rotation *)
+                Same
+                  (Eq
+                     {
+                       elt = r_elt;
+                       left = Eq { elt; left; right = r_left };
+                       right = r_right;
+                     }
+                  )
           )
       )
 end

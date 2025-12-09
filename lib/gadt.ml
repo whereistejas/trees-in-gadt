@@ -289,7 +289,7 @@ module BST_for_testing = struct
     loop ~lower:None ~upper:None node
 end
 
-module AVL = struct
+module Avl = struct
   open Base.Poly
 
   (** A self-balancing BST data structure.
@@ -584,9 +584,9 @@ module AVL = struct
       )
 end
 
-module AVL_for_testing = struct
+module Avl_for_testing = struct
   open Base.Poly
-  include AVL
+  include Avl
 
   let to_list node : 'a list =
     let rec to_list_aux acc = function
@@ -676,7 +676,7 @@ module AVL_for_testing = struct
     )
 end
 
-module AVL_Gadt = struct
+module Avl_Gadt = struct
   open Base.Poly
 
   (* These are inhabitated types. The OCaml compiler can look at the type

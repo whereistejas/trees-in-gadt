@@ -1,6 +1,6 @@
 open Base
 open Base.Poly
-module AVL = Gadt.AVL_for_testing
+module AVL = Gadt.Avl_for_testing
 
 let cmp a b : Ordering.t = Ordering.of_int (compare a b)
 

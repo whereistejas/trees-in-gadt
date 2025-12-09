@@ -10,13 +10,13 @@
       dune test
 
       # Or run directly with options
-      dune exec test/test_avl_qcheck.exe
+      dune exec test/proptest_avl.exe
 
       # Run with a specific seed (for reproducibility)
-      dune exec test/test_avl_qcheck.exe -- --seed 12345
+      dune exec test/proptest_avl.exe -- --seed 12345
 
       # Run more iterations
-      dune exec test/test_avl_qcheck.exe -- -v --count 50000
+      dune exec test/proptest_avl.exe -- -v --count 50000
     ]}
 
     {2 On failure}

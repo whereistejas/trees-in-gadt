@@ -1,6 +1,6 @@
 (library
  (name test_gadt)
- (modules bst avl gadt_avl_test)
+ (modules bst avl)
  (libraries gadt base)
  (inline_tests)
  (preprocess
@@ -32,6 +32,11 @@
 ; QCheck property-based tests (proptest-like experience)
 
 (test
- (name test_avl_qcheck)
- (modules test_avl_qcheck)
+ (name proptest_avl)
+ (modules proptest_avl)
+ (libraries gadt base qcheck qcheck-core))
+
+(test
+ (name proptest_avl_gadt)
+ (modules proptest_avl_gadt)
  (libraries gadt base qcheck qcheck-core))

@@ -1,6 +1,6 @@
 open Base
 open Base.Poly
-module BST = Gadt.BST
+module BST = Gadt.BST_for_testing
 
 let cmp a b : Ordering.t = Ordering.of_int (compare a b)
 

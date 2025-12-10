@@ -1,12 +1,12 @@
 open Base
 open Base.Poly
-module AVL = Gadt.Avl_Gadt_for_testing
+module AVL = Gadt.Avl_for_testing
 
 let cmp a b : Ordering.t = Ordering.of_int (compare a b)
 
 let gen_balanced_tree n =
   let seq = List.init n ~f:(fun i -> i + 1) in
-  List.fold seq ~init:AVL.empty ~f:(fun acc x -> AVL.insert x ~cmp acc)
+  List.fold seq ~init:AVL.Empty ~f:(fun acc x -> AVL.insert x ~cmp acc)
 
 (* Builds a right-leaning chain without balancing let gen_unbalanced_tree n =
    let rec build = function | 0 -> AVL.Empty | 1 -> AVL.Leaf 1 | i -> AVL.Node {
@@ -258,63 +258,244 @@ let%test "alternating high-low maintains invariants" =
   in
   AVL.check_invariants tree ~cmp
 
-(* (*
-   ============================================================================
+(* ============================================================================
    Section 7: Remove with Rebalancing
-   ============================================================================
-   *)
+   ============================================================================ *)
 
-   let%expect_test "remove causes rebalancing - delete from shorter side" = let
-   tree = List.fold [ 1; 2; 3; 4; 5 ] ~init:AVL.Empty ~f:(fun acc x ->
-   AVL.insert x ~cmp acc ) in Stdio.print_endline "Before remove:";
-   Stdio.print_string (AVL.pp_tree Int.to_string tree); let tree, removed =
-   AVL.remove 1 ~cmp tree in Stdio.printf "\nRemoved: %s\n" (Option.value_map
-   removed ~default:"None" ~f:Int.to_string); Stdio.print_endline "After
-   remove:"; Stdio.print_string (AVL.pp_tree Int.to_string tree); [%expect {|
-   Before remove: 2(h=3) ┌─────┴──────┐ 1(h=1) 4(h=2) ┌───┴────┐ 3(h=1) 5(h=1)
+let%expect_test "remove causes rebalancing - delete from shorter side" =
+  let tree =
+    List.fold [ 1; 2; 3; 4; 5 ] ~init:AVL.Empty ~f:(fun acc x ->
+        AVL.insert x ~cmp acc
+    )
+  in
+  Stdio.print_endline "Before remove:";
+  Stdio.print_string (AVL.pp_tree Int.to_string tree);
+  let tree, removed = AVL.remove 1 ~cmp tree in
+  Stdio.printf "\nRemoved: %s\n"
+    (Option.value_map removed ~default:"None" ~f:Int.to_string);
+  Stdio.print_endline "After\n   remove:";
+  Stdio.print_string (AVL.pp_tree Int.to_string tree);
+  [%expect
+    {|
+  Before remove:
+        2(h=3)
+     ┌─────┴──────┐
+  1(h=1)       4(h=2)
+              ┌───┴────┐
+           3(h=1)   5(h=1)
 
-   Removed: 1 After remove: 4(h=3) ┌─────┴──────┐ 2(h=2) 5(h=1) ┌──┴───┐ .
-   3(h=1) |}]
+  Removed: 1
+  After
+     remove:
+        4(h=3)
+     ┌─────┴──────┐
+  2(h=2)       5(h=1)
+  ┌──┴───┐
+  .   3(h=1)
+  |}]
 
-   let%test "remove with rebalancing maintains invariants" = let tree =
-   List.fold [ 1; 2; 3; 4; 5 ] ~init:AVL.Empty ~f:(fun acc x -> AVL.insert x
-   ~cmp acc ) in let tree, _ = AVL.remove 1 ~cmp tree in AVL.check_invariants
-   tree ~cmp
+let%test "remove with rebalancing maintains invariants" =
+  let tree =
+    List.fold [ 1; 2; 3; 4; 5 ] ~init:AVL.Empty ~f:(fun acc x ->
+        AVL.insert x ~cmp acc
+    )
+  in
+  let tree, _ = AVL.remove 1 ~cmp tree in
+  AVL.check_invariants tree ~cmp
 
-   (*
-   ============================================================================
+(* ============================================================================
    Section 8: QCheck
-   ============================================================================
-   *)
+   ============================================================================ *)
 
-   let%expect_test "inserts in random order and checks invariants" = let tree =
-   List.fold [ 1; 3; 2 ] ~init:AVL.Empty ~f:(fun acc x -> AVL.insert x ~cmp acc)
-   in Stdio.print_string (AVL.pp_tree Int.to_string tree); [%expect {| 2(h=2)
-   ┌───┴────┐ 1(h=1) 3(h=1) |}]
+let%expect_test "inserts in random order and checks invariants" =
+  let tree =
+    List.fold [ 1; 3; 2 ] ~init:AVL.Empty ~f:(fun acc x -> AVL.insert x ~cmp acc)
+  in
+  Stdio.print_string (AVL.pp_tree Int.to_string tree);
+  [%expect {|
+      2(h=2)
+     ┌───┴────┐
+  1(h=1)   3(h=1)
+  |}]
 
-   let%test_unit "qcheck 2" = let tree = AVL.Empty in let tree = AVL.insert 44
-   ~cmp tree in let tree = AVL.insert 24 ~cmp tree in let tree = AVL.insert 67
-   ~cmp tree in let tree, _ = AVL.remove 17 ~cmp tree in let tree = AVL.insert
-   111 ~cmp tree in let tree = AVL.insert 46 ~cmp tree in let tree = AVL.insert
-   59 ~cmp tree in assert (AVL.check_and_report tree ~cmp ~show:Int.to_string)
+let%test_unit "qcheck 2" =
+  let tree = AVL.Empty in
+  let tree = AVL.insert 44 ~cmp tree in
+  let tree = AVL.insert 24 ~cmp tree in
+  let tree = AVL.insert 67 ~cmp tree in
+  let tree, _ = AVL.remove 17 ~cmp tree in
+  let tree = AVL.insert 111 ~cmp tree in
+  let tree = AVL.insert 46 ~cmp tree in
+  let tree = AVL.insert 59 ~cmp tree in
+  assert (AVL.check_and_report tree ~cmp ~show:Int.to_string)
 
-   let%expect_test "qcheck 3" = let tree = AVL.Empty in let tree = AVL.insert 29
-   ~cmp tree in let tree = AVL.insert 20 ~cmp tree in let tree = AVL.insert 115
-   ~cmp tree in let tree, removed = AVL.remove 20 ~cmp tree in [%test_eq: int
-   option] removed (Some 20); let tree, removed = AVL.remove 103 ~cmp tree in
-   [%test_eq: int option] removed None; let tree, removed = AVL.remove 81 ~cmp
-   tree in [%test_eq: int option] removed None; let tree = AVL.insert 43 ~cmp
-   tree in assert (AVL.check_and_report tree ~cmp ~show:Int.to_string);
-   Stdio.print_string (AVL.pp_tree Int.to_string tree); [%expect {| 43(h=2)
-   ┌────┴─────┐ 29(h=1) 115(h=1) |}]
+let%expect_test "qcheck 3" =
+  let tree = AVL.Empty in
+  let tree = AVL.insert 29 ~cmp tree in
+  let tree = AVL.insert 20 ~cmp tree in
+  let tree = AVL.insert 115 ~cmp tree in
+  let tree, removed = AVL.remove 20 ~cmp tree in
+  [%test_eq: int option] removed (Some 20);
+  let tree, removed = AVL.remove 103 ~cmp tree in
+  [%test_eq: int option] removed None;
+  let tree, removed = AVL.remove 81 ~cmp tree in
+  [%test_eq: int option] removed None;
+  let tree = AVL.insert 43 ~cmp tree in
+  assert (AVL.check_and_report tree ~cmp ~show:Int.to_string);
+  Stdio.print_string (AVL.pp_tree Int.to_string tree);
+  [%expect {|
+       43(h=2)
+     ┌────┴─────┐
+  29(h=1)   115(h=1)
+  |}]
 
-   let%test_unit "qcheck 4" = let tree = AVL.Empty in let tree = AVL.insert 51
-   ~cmp tree in let tree = AVL.insert 78 ~cmp tree in let tree = AVL.insert 27
-   ~cmp tree in let tree, _ = AVL.remove 5 ~cmp tree in let tree = AVL.insert
-   123 ~cmp tree in let tree, _ = AVL.remove 9 ~cmp tree in let tree =
-   AVL.insert 105 ~cmp tree in let tree = AVL.insert 55 ~cmp tree in let tree =
-   AVL.insert 28 ~cmp tree in let tree, _ = AVL.remove 78 ~cmp tree in let tree
-   = AVL.insert 70 ~cmp tree in let tree, _ = AVL.remove 82 ~cmp tree in let
-   tree, _ = AVL.remove 105 ~cmp tree in let tree = AVL.insert 72 ~cmp tree in
-   let tree = AVL.insert 124 ~cmp tree in assert (AVL.check_and_report tree ~cmp
-   ~show:Int.to_string) *)
+let%test_unit "qcheck 4" =
+  let tree = AVL.Empty in
+  let tree = AVL.insert 51 ~cmp tree in
+  let tree = AVL.insert 78 ~cmp tree in
+  let tree = AVL.insert 27 ~cmp tree in
+  let tree, _ = AVL.remove 5 ~cmp tree in
+  let tree = AVL.insert 123 ~cmp tree in
+  let tree, _ = AVL.remove 9 ~cmp tree in
+  let tree = AVL.insert 105 ~cmp tree in
+  let tree = AVL.insert 55 ~cmp tree in
+  let tree = AVL.insert 28 ~cmp tree in
+  let tree, _ = AVL.remove 78 ~cmp tree in
+  let tree = AVL.insert 70 ~cmp tree in
+  let tree, _ = AVL.remove 82 ~cmp tree in
+  let tree, _ = AVL.remove 105 ~cmp tree in
+  let tree = AVL.insert 72 ~cmp tree in
+  let tree = AVL.insert 124 ~cmp tree in
+  assert (AVL.check_and_report tree ~cmp ~show:Int.to_string)
+
+(* ============================================================================
+   Section: Code Walkthrough - Simple Insertion Cases
+   ============================================================================ *)
+
+let%expect_test "insertion without rebalancing - balanced tree stays balanced" =
+  (* Start with a balanced tree: root=2, left=1, right=3 *)
+  let tree =
+    List.fold [ 2; 1; 3 ] ~init:AVL.Empty ~f:(fun acc x -> AVL.insert x ~cmp acc)
+  in
+  Stdio.print_endline "Before inserting 0:";
+  Stdio.print_string (AVL.pp_tree Int.to_string tree);
+  Stdio.print_endline "\n---\n";
+  (* Insert 0 into the left subtree (Leaf 1) *)
+  let tree_after = AVL.insert 0 ~cmp tree in
+  Stdio.print_endline "After inserting 0 (no rebalancing needed):";
+  Stdio.print_string (AVL.pp_tree Int.to_string tree_after);
+  [%expect
+    {|
+    Before inserting 0:
+        2(h=2)
+       ┌───┴────┐
+    1(h=1)   3(h=1)
+
+    ---
+
+    After inserting 0 (no rebalancing needed):
+            2(h=3)
+          ┌────┴────┐
+       1(h=2)    3(h=1)
+       ┌──┴──┐
+    0(h=1)   .
+    |}]
+
+let%expect_test "insertion with LL rotation - left-heavy tree requires rotation"
+    =
+  (* Start with a left-heavy tree: root=3, left=2, right=empty *)
+  let tree =
+    List.fold [ 2; 3 ] ~init:AVL.Empty ~f:(fun acc x -> AVL.insert x ~cmp acc)
+  in
+  Stdio.print_endline "Before inserting 1:";
+  Stdio.print_string (AVL.pp_tree Int.to_string tree);
+  Stdio.print_endline "\n---\n";
+  (* Insert 1 into the left subtree (Leaf 2), causing left-left imbalance *)
+  let tree_after = AVL.insert 1 ~cmp tree in
+  Stdio.print_endline "After inserting 1 (LL rotation applied):";
+  Stdio.print_string (AVL.pp_tree Int.to_string tree_after);
+  [%expect
+    {|
+    Before inserting 1:
+       3(h=2)
+       ┌──┴──┐
+    2(h=1)   .
+
+    ---
+
+    After inserting 1 (LL rotation applied):
+        2(h=2)
+       ┌───┴────┐
+    1(h=1)   3(h=1)
+    |}]
+(* ============================================================================
+   Section: BST from Binary_search_tree.svg
+   ============================================================================ *)
+
+[@@@ocamlformat "disable"]
+(* The BST structure from the SVG: 
+
+    [
+{ 
+          8
+        /   \
+      3     10
+      / \      \
+    1   6      14
+        / \    /
+      4   7  13
+}
+    ]
+
+   Values: [8, 3, 10, 1, 6, 14, 4, 7, 13] We'll insert them in the order that
+   matches the BST structure, though AVL will rebalance to maintain height
+   balance. *)
+[@@@ocamlformat "enable"]
+
+let%expect_test "BST from Binary_search_tree.svg - build and verify with AVL" =
+  let values = [ 8; 3; 10; 1; 6; 14; 4; 7; 13 ] in
+  let tree =
+    List.fold values ~init:AVL.Empty ~f:(fun acc x -> AVL.insert x ~cmp acc)
+  in
+  Stdio.print_endline "AVL tree built from Binary_search_tree.svg values:";
+  Stdio.print_string (AVL.pp_tree Int.to_string tree);
+  Stdio.print_endline "\n---\n";
+  (* Verify all values are present *)
+  List.iter values ~f:(fun v -> assert (AVL.member v ~cmp tree)
+  );
+  Stdio.print_endline "All values from SVG are present in the tree.";
+  (* Verify AVL invariants *)
+  assert (AVL.check_invariants tree ~cmp);
+  Stdio.print_endline "AVL invariants are maintained.";
+  (* Verify the tree contains exactly the expected values *)
+  let tree_values = AVL.to_list tree |> List.sort ~compare:Int.compare in
+  let expected_values = List.sort values ~compare:Int.compare in
+  [%test_eq: int list] tree_values expected_values;
+  Stdio.print_endline "Tree contains exactly the expected values.";
+  [%expect
+    {|
+    AVL tree built from Binary_search_tree.svg values:
+                       8(h=4)
+             ┌────────────┴────────────┐
+          3(h=3)                    13(h=2)
+       ┌─────┴──────┐              ┌────┴────┐
+    1(h=1)       6(h=2)        10(h=1)   14(h=1)
+                ┌───┴────┐
+             4(h=1)   7(h=1)
+
+    ---
+
+    All values from SVG are present in the tree.
+    AVL invariants are maintained.
+    Tree contains exactly the expected values.
+    |}]
+
+let%test_unit "BST from Binary_search_tree.svg - invariants check" =
+  let values = [ 8; 3; 10; 1; 6; 14; 4; 7; 13 ] in
+  let tree =
+    List.fold values ~init:AVL.Empty ~f:(fun acc x -> AVL.insert x ~cmp acc)
+  in
+  (* Verify all values are present *)
+  List.iter values ~f:(fun v -> assert (AVL.member v ~cmp tree));
+  (* Verify AVL invariants *)
+  assert (AVL.check_and_report tree ~cmp ~show:Int.to_string)
